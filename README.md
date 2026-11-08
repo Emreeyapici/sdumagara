@@ -124,25 +124,33 @@ npm run start
 
 ---
 
-## ☁️ Supabase & Vercel ile Ücretsiz Canlıya Alma (Deployment)
+## ⚡ Supabase Kurulumu & Canlı Veritabanı Geçişi (3 Adımda Canlıya Alma)
 
-Proje Vercel üzerinde %100 ücretsiz olarak saniyeler içinde canlıya alınabilir:
+Bu proje artık tamamen **Supabase (PostgreSQL + Realtime Canlı Senkronizasyon)** mimarisine hazırdır. Herkes için kalıcı ve anlık ortak veri sağlamak için şu 3 adımı uygulayabilirsiniz:
 
-1. **GitHub'a Gönderme:**
-   ```bash
-   git add .
-   git commit -m "feat: complete sdumak web platform"
-   git push origin main
+### 1. Adım: Ücretsiz Supabase Projesi Oluşturun
+1. [supabase.com](https://supabase.com) adresine gidip ücretsiz üye olun ve **"New Project"** butonuna basarak bir proje açın (Örn: `sdumak-db`).
+2. Bir veritabanı şifresi belirleyin ve bölge olarak **Frankfurt (eu-central-1)** seçin.
+
+### 2. Adım: Veritabanı Tablolarını Tek Tıkla Yükleyin
+1. Supabase Dashboard menüsünden **"SQL Editor"** sekmesine tıklayın.
+2. Projedeki [`supabase/schema.sql`](supabase/schema.sql) dosyasının tüm içeriğini kopyalayıp SQL Editor'e yapıştırın.
+3. Sağ alttaki yeşil **"Run" (Çalıştır)** butonuna basın.
+   * *Tüm tablolar (`users`, `topics`, `events`, `caves`, `equipment`, `safety_logs`, `board_members`, `faqs`, `guides`), güvenlik izinleri (RLS), canlı yayın (Realtime) ve Kurucu Admin **Emre Yapıcı** hesabı otomatik olarak kurulacaktır.*
+
+### 3. Adım: Bağlantı Bilgilerini Ekleyin
+1. Supabase sol menüsündeki **Project Settings > API** sekmesine gidin.
+2. Aşağıdaki iki değeri kopyalayın:
+   * **Project URL:** `https://xxxx.supabase.co`
+   * **Project API keys (anon / public):** `eyJhbGci...`
+3. Bilgisayarınızdaki `.env.local` dosyasını açıp değerleri yapıştırın:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://sizin-proje-id.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=sizin-anon-anahtariniz
    ```
-2. **Vercel Bağlantısı:**
-   * [vercel.com](https://vercel.com) adresine gidin.
-   * `Import Project` seçeneğiyle GitHub deponuzu seçin.
-   * `Deploy` butonuna basın. Siteniz ücretsiz `.vercel.app` alan adıyla yayına girecektir.
+4. **Vercel'e Yüklerken:** Vercel Dashboard > Projeniz > **Settings > Environment Variables** bölümüne bu iki değişkeni aynı isimlerle ekleyin.
 
-3. **Supabase Entegrasyonu (Kalıcı PostgreSQL ve Medya Deposu İçin):**
-   * [supabase.com](https://supabase.com) üzerinden ücretsiz bir proje açın.
-   * `src/types/index.ts` dosyasında tanımlı tabloları (`profiles`, `topics`, `comments`, `events`, `caves`, `equipment`) Supabase SQL editöründe oluşturun.
-   * `.env.local` dosyasına `NEXT_PUBLIC_SUPABASE_URL` ve `NEXT_PUBLIC_SUPABASE_ANON_KEY` değerlerinizi ekleyin.
+Artık sitenizde Emre Yapıcı veya herhangi bir üye bir duyuru yayınladığında, etkinliğe başvurduğunda ya da canlı mağara takibi başlattığında; **tüm dünyadaki ziyaretçilerin ve üyelerin ekranları sayfayı yenilemeye dahi gerek kalmadan (Realtime WebSocket ile) anında güncellenir!**
 
 ---
 

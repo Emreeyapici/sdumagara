@@ -1,146 +1,229 @@
+-- ==========================================================
 -- SDÜMAK (Süleyman Demirel Üniversitesi Mağara Araştırma ve Koruma Topluluğu)
--- Supabase PostgreSQL Veritabanı Şeması & Row Level Security (RLS) Politikaları
+-- Supabase Veritabanı Kurulum Şeması (schema.sql)
+-- ==========================================================
+-- Bu SQL dosyasını Supabase Dashboard > SQL Editor sekmesine
+-- yapıştırıp "Run" (Çalıştır) butonuna basmanız yeterlidir.
+-- ==========================================================
 
--- 1. Kullanıcı Profilleri Tablosu
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
-  name TEXT NOT NULL,
-  email TEXT UNIQUE NOT NULL,
-  student_no TEXT,
-  phone TEXT,
-  blood_type TEXT CHECK (blood_type IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', '0+', '0-')),
-  role TEXT DEFAULT 'uye' CHECK (role IN ('admin', 'yonetim', 'egitmen', 'uye', 'caylak')),
-  avatar_url TEXT,
-  bio TEXT,
-  badges TEXT[] DEFAULT ARRAY['SDÜMAK 2026', 'Temel Mağaracı']::TEXT[],
-  caving_count INT DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 2. Forum Kategorileri
-CREATE TABLE IF NOT EXISTS public.forum_categories (
+-- 1. KULLANICILAR TABLOSU (users)
+CREATE TABLE IF NOT EXISTS public.users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
-  description TEXT,
-  icon_name TEXT,
-  color TEXT
+  email TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  student_no TEXT,
+  phone TEXT,
+  department TEXT,
+  blood_type TEXT DEFAULT '0 Rh+',
+  emergency_contact TEXT,
+  role TEXT DEFAULT 'uye' CHECK (role IN ('admin', 'yonetim', 'egitmen', 'uye', 'caylak')),
+  caving_count INTEGER DEFAULT 0,
+  srt_experience BOOLEAN DEFAULT false,
+  join_year INTEGER DEFAULT 2025,
+  avatar TEXT,
+  badges JSONB DEFAULT '[]'::jsonb,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Forum Konuları & Kulüp Haberleri
-CREATE TABLE IF NOT EXISTS public.forum_topics (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  category_id TEXT REFERENCES public.forum_categories(id) ON DELETE SET NULL,
-  author_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+-- 2. FORUM KONULARI & HABERLER TABLOSU (topics)
+CREATE TABLE IF NOT EXISTS public.topics (
+  id TEXT PRIMARY KEY,
+  category_id TEXT NOT NULL,
+  author JSONB NOT NULL,
   title TEXT NOT NULL,
   content TEXT NOT NULL,
-  tags TEXT[] DEFAULT ARRAY['Genel']::TEXT[],
-  is_pinned BOOLEAN DEFAULT FALSE,
-  is_announcement BOOLEAN DEFAULT FALSE,
-  views_count INT DEFAULT 0,
-  likes_count INT DEFAULT 0,
-  liked_by UUID[] DEFAULT ARRAY[]::UUID[],
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  views_count INTEGER DEFAULT 1,
+  likes_count INTEGER DEFAULT 0,
+  liked_by JSONB DEFAULT '[]'::jsonb,
+  comments_count INTEGER DEFAULT 0,
+  is_pinned BOOLEAN DEFAULT false,
+  is_locked BOOLEAN DEFAULT false,
+  is_announcement BOOLEAN DEFAULT false,
+  tags JSONB DEFAULT '["Genel"]'::jsonb,
+  images JSONB DEFAULT '[]'::jsonb,
+  comments JSONB DEFAULT '[]'::jsonb
 );
 
--- 4. Yorumlar
-CREATE TABLE IF NOT EXISTS public.topic_comments (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  topic_id UUID REFERENCES public.forum_topics(id) ON DELETE CASCADE NOT NULL,
-  author_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
-  content TEXT NOT NULL,
-  likes INT DEFAULT 0,
-  liked_by UUID[] DEFAULT ARRAY[]::UUID[],
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 5. Faaliyetler & Kamplar
+-- 3. ETKİNLİKLER & FAALİYET TAKVİMİ (events)
 CREATE TABLE IF NOT EXISTS public.events (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   description TEXT,
   location TEXT NOT NULL,
   cave_name TEXT NOT NULL,
-  start_date DATE NOT NULL,
-  end_date DATE,
-  quota INT DEFAULT 25,
-  difficulty TEXT CHECK (difficulty IN ('Basit / Yatay Mağara', 'Orta Seviye', 'İleri / Dikey Mağara (SRT Zorunlu)')),
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  quota INTEGER DEFAULT 25,
+  difficulty TEXT DEFAULT 'Basit / Yatay Mağara',
   status TEXT DEFAULT 'Kayıtlar Açık',
   organizer TEXT DEFAULT 'SDÜMAK Yönetim Kurulu',
-  leaders TEXT[] DEFAULT ARRAY[]::TEXT[],
-  requirements TEXT[] DEFAULT ARRAY[]::TEXT[],
-  registered_user_ids UUID[] DEFAULT ARRAY[]::UUID[],
+  leaders JSONB DEFAULT '["Emre Yapıcı"]'::jsonb,
+  requirements JSONB DEFAULT '[]'::jsonb,
+  registered_user_ids JSONB DEFAULT '[]'::jsonb,
+  cover_image TEXT,
+  images JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. Mağara Atlası (Isparta & Bölge)
+-- 4. MAĞARA ATLASI (caves)
 CREATE TABLE IF NOT EXISTS public.caves (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   district TEXT NOT NULL,
-  depth INT NOT NULL,
-  length INT NOT NULL,
-  difficulty TEXT CHECK (difficulty IN ('Kolay', 'Orta', 'Dikey/Zor', 'Ekstrem')),
-  lat DOUBLE PRECISION,
-  lng DOUBLE PRECISION,
-  water_status TEXT,
-  vertical_drops TEXT,
-  survey_available BOOLEAN DEFAULT FALSE,
+  depth INTEGER DEFAULT 0,
+  length INTEGER DEFAULT 0,
+  difficulty TEXT DEFAULT 'Orta',
+  coordinates JSONB DEFAULT '{"lat": 37.8, "lng": 30.8}'::jsonb,
+  survey_available BOOLEAN DEFAULT false,
   survey_image_url TEXT,
+  water_status TEXT DEFAULT 'Kuru',
+  vertical_drops TEXT,
   description TEXT,
-  images TEXT[] DEFAULT ARRAY[]::TEXT[]
+  images JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. Ekipman & Malzeme Zimmet Takibi
+-- 5. EKİPMAN & ZİMMET ENVANTERİ (equipment)
 CREATE TABLE IF NOT EXISTS public.equipment (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   brand_model TEXT,
-  category TEXT CHECK (category IN ('İp & Halat', 'Kişisel Dikey Ekipman', 'Kask & Aydınlatma', 'Emniyet & Ankraj', 'Ortak Kamp Malzemesi')),
-  serial_no TEXT UNIQUE NOT NULL,
-  status TEXT DEFAULT 'Kulüp Deposunda' CHECK (status IN ('Kulüp Deposunda', 'Zimmette', 'Bakımda / Kontrolde', 'Hizmet Dışı')),
-  assigned_to UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  assigned_date DATE,
-  last_inspection_date DATE,
-  condition TEXT DEFAULT 'Mükemmel'
+  category TEXT NOT NULL,
+  serial_no TEXT UNIQUE,
+  status TEXT DEFAULT 'Kulüp Deposunda',
+  assigned_to TEXT,
+  assigned_date TEXT,
+  last_inspection_date TEXT,
+  condition TEXT DEFAULT 'Mükemmel',
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. Canlı Emniyet & Yüzey Takip Masası
-CREATE TABLE IF NOT EXISTS public.safety_watch (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+-- 6. CANLI YÜZEY TAKİBİ & GÜVENLİK PROTOKOLÜ (safety_logs)
+CREATE TABLE IF NOT EXISTS public.safety_logs (
+  id TEXT PRIMARY KEY,
   cave_name TEXT NOT NULL,
   team_leader TEXT NOT NULL,
   surface_watch_person TEXT NOT NULL,
   contact_phone TEXT NOT NULL,
-  entry_time TIMESTAMPTZ NOT NULL,
-  estimated_exit_time TIMESTAMPTZ NOT NULL,
-  team_size INT DEFAULT 4,
-  status TEXT DEFAULT 'Mağarada (Faaliyette)' CHECK (status IN ('Mağarada (Faaliyette)', 'Güvenle Çıktı', 'Gecikme Alarmı'))
+  entry_time TEXT NOT NULL,
+  estimated_exit_time TEXT NOT NULL,
+  team_size INTEGER DEFAULT 1,
+  status TEXT DEFAULT 'Mağarada (Faaliyette)',
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Row Level Security (RLS) Etkinleştirme
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.forum_topics ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.topic_comments ENABLE ROW LEVEL SECURITY;
+-- 7. KULÜP YÖNETİMİ & MASALAR (board_members)
+CREATE TABLE IF NOT EXISTS public.board_members (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  desk TEXT NOT NULL,
+  avatar TEXT,
+  contact TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 8. SIKÇA SORULAN SORULAR (faqs)
+CREATE TABLE IF NOT EXISTS public.faqs (
+  id TEXT PRIMARY KEY,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  category TEXT DEFAULT 'Genel',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 9. ÜYE REHBERİ & BİLGİ BANKASI (guides)
+CREATE TABLE IF NOT EXISTS public.guides (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  category TEXT NOT NULL,
+  summary TEXT,
+  content TEXT NOT NULL,
+  icon TEXT DEFAULT 'AlertTriangle',
+  is_important BOOLEAN DEFAULT false,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================================
+-- ROW LEVEL SECURITY (RLS) POLİTİKALARI
+-- (Herkese açık okuma ve web sitesi anahtarı ile yazma izinleri)
+-- ==========================================================
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.topics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.caves ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.equipment ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.safety_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.board_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.faqs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.guides ENABLE ROW LEVEL SECURITY;
 
--- Temel Güvenlik Politikaları (Örnek)
--- Herkes okuyabilir (Public Read)
-CREATE POLICY "Public read topics" ON public.forum_topics FOR SELECT USING (true);
-CREATE POLICY "Public read events" ON public.events FOR SELECT USING (true);
-CREATE POLICY "Public read equipment" ON public.equipment FOR SELECT USING (true);
-CREATE POLICY "Public read caves" ON public.caves FOR SELECT USING (true);
+-- Anon / Public erişim politikaları
+CREATE POLICY "Public Read Users" ON public.users FOR SELECT USING (true);
+CREATE POLICY "Public Insert/Update Users" ON public.users FOR ALL USING (true);
 
--- Yazma izinleri (Authenticated Users)
-CREATE POLICY "Users can create topics" ON public.forum_topics FOR INSERT WITH CHECK (auth.uid() = author_id);
-CREATE POLICY "Users can update own topics or admin can update" ON public.forum_topics FOR UPDATE USING (
-  auth.uid() = author_id OR 
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'yonetim'))
-);
-CREATE POLICY "Users can delete own topics or admin can delete" ON public.forum_topics FOR DELETE USING (
-  auth.uid() = author_id OR 
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'yonetim'))
-);
+CREATE POLICY "Public Read Topics" ON public.topics FOR SELECT USING (true);
+CREATE POLICY "Public Manage Topics" ON public.topics FOR ALL USING (true);
 
+CREATE POLICY "Public Read Events" ON public.events FOR SELECT USING (true);
+CREATE POLICY "Public Manage Events" ON public.events FOR ALL USING (true);
+
+CREATE POLICY "Public Read Caves" ON public.caves FOR SELECT USING (true);
+CREATE POLICY "Public Manage Caves" ON public.caves FOR ALL USING (true);
+
+CREATE POLICY "Public Read Equipment" ON public.equipment FOR SELECT USING (true);
+CREATE POLICY "Public Manage Equipment" ON public.equipment FOR ALL USING (true);
+
+CREATE POLICY "Public Read Safety" ON public.safety_logs FOR SELECT USING (true);
+CREATE POLICY "Public Manage Safety" ON public.safety_logs FOR ALL USING (true);
+
+CREATE POLICY "Public Read Board" ON public.board_members FOR SELECT USING (true);
+CREATE POLICY "Public Manage Board" ON public.board_members FOR ALL USING (true);
+
+CREATE POLICY "Public Read FAQs" ON public.faqs FOR SELECT USING (true);
+CREATE POLICY "Public Manage FAQs" ON public.faqs FOR ALL USING (true);
+
+CREATE POLICY "Public Read Guides" ON public.guides FOR SELECT USING (true);
+CREATE POLICY "Public Manage Guides" ON public.guides FOR ALL USING (true);
+
+-- ==========================================================
+-- REALTIME YAYININI AKTİFLEŞTİR (Canlı Senkronizasyon)
+-- ==========================================================
+-- Admin bir haber girdiğinde veya bir üye başvurduğunda
+-- herkesin sayfasında yenileme yapmadan anında güncellensin.
+-- ==========================================================
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.topics;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.events;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.safety_logs;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.board_members;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.guides;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.equipment;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.caves;
+
+-- ==========================================================
+-- İLK RESMİ KURUCU ADMİNİ EKLE (Emre Yapıcı)
+-- ==========================================================
+INSERT INTO public.users (
+  id, name, email, password, student_no, phone, department, blood_type, role, caving_count, srt_experience, join_year, avatar, is_active
+) VALUES (
+  'user-admin-emre',
+  'Emre Yapıcı',
+  'emre4821@outlook.com',
+  'Luciddreams4090',
+  '2211019045',
+  '05550000000',
+  'Mühendislik / Doğa Bilimleri',
+  'A Rh+',
+  'admin',
+  24,
+  true,
+  2025,
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+  true
+) ON CONFLICT (id) DO NOTHING;

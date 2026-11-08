@@ -45,6 +45,7 @@ export default function MemberManagementPage() {
     addUserBadge,
     removeUserBadge,
     updateUserByAdmin,
+    isSupabaseActive,
   } = useApp();
 
   const [search, setSearch] = useState('');
@@ -205,6 +206,33 @@ export default function MemberManagementPage() {
         <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-emerald-400" />
           {successMsg}
+        </div>
+      )}
+
+      {/* Database Connection Status Banner */}
+      {isSupabaseActive ? (
+        <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#142319] border border-[#23422e] text-xs">
+          <div className="flex items-center gap-2 text-[#9fc4aa]">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#48bb78] animate-pulse shrink-0" />
+            <span>
+              <strong>Supabase Bulut Veritabanı Aktif:</strong> Tüm veriler (üyeler, haberler, etkinlikler, ekipman) merkezi bulutta saklanır ve herkese gerçek zamanlı senkronize olur.
+            </span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-[#1a3323] text-[#b4dfc0] border border-[#2d573b] font-mono shrink-0">
+            Canlı & Ortak
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#241a14] border border-[#483324] text-xs">
+          <div className="flex items-center gap-2 text-[#dba076]">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#dba076] shrink-0" />
+            <span>
+              <strong>Supabase Bağlantısı Hazır:</strong> .env.local dosyanıza Supabase URL ve Anon Key bilgilerinizi ekleyerek canlı merkezi veritabanını aktif edebilirsiniz.
+            </span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-[#17120e] text-[#a88267] border border-[#3d2719] font-mono shrink-0">
+            Yerel Hafıza
+          </span>
         </div>
       )}
 

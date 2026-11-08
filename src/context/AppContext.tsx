@@ -1,10 +1,21 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, ForumTopic, EventItem, Cave, Equipment, CaveSafetyLog, Comment, UserRole, BoardMember, FAQItem, GuideArticle } from '@/types';
+import {
+  User,
+  ForumTopic,
+  EventItem,
+  Cave,
+  Equipment,
+  CaveSafetyLog,
+  Comment,
+  UserRole,
+  BoardMember,
+  FAQItem,
+  GuideArticle,
+} from '@/types';
 import {
   INITIAL_USERS,
-  INITIAL_CATEGORIES,
   INITIAL_TOPICS,
   INITIAL_EVENTS,
   INITIAL_CAVES,
@@ -14,12 +25,43 @@ import {
   INITIAL_FAQS,
   INITIAL_GUIDES,
 } from '@/lib/mockData';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import {
+  fetchTopicsFromDb,
+  syncTopicToDb,
+  deleteTopicFromDb,
+  fetchUsersFromDb,
+  syncUserToDb,
+  deleteUserFromDb,
+  fetchEventsFromDb,
+  syncEventToDb,
+  deleteEventFromDb,
+  fetchCavesFromDb,
+  syncCaveToDb,
+  deleteCaveFromDb,
+  fetchEquipmentFromDb,
+  syncEquipmentToDb,
+  deleteEquipmentFromDb,
+  fetchSafetyFromDb,
+  syncSafetyToDb,
+  deleteSafetyFromDb,
+  fetchBoardFromDb,
+  syncBoardToDb,
+  deleteBoardFromDb,
+  fetchFaqsFromDb,
+  syncFaqToDb,
+  deleteFaqFromDb,
+  fetchGuidesFromDb,
+  syncGuideToDb,
+  deleteGuideFromDb,
+} from '@/lib/supabaseService';
 
 interface AppContextType {
   currentUser: User | null;
   users: User[];
-  isAdmin: boolean; // Sadece admin mi? (Emre Yapıcı)
-  canViewPrivateSections: boolean; // admin, yonetim veya egitmen mi? (Mağara atlası, ekipman, canlı takip görebilir)
+  isAdmin: boolean;
+  canViewPrivateSections: boolean;
+  isSupabaseActive: boolean;
 
   login: (email: string, password: string) => { success: boolean; message?: string };
   register: (userData: {
@@ -38,7 +80,14 @@ interface AppContextType {
 
   // Forum
   topics: ForumTopic[];
-  addTopic: (data: { categoryId: string; title: string; content: string; tags: string[]; isAnnouncement?: boolean; images?: string[] }) => string;
+  addTopic: (data: {
+    categoryId: string;
+    title: string;
+    content: string;
+    tags: string[];
+    isAnnouncement?: boolean;
+    images?: string[];
+  }) => string;
   updateTopic: (topicId: string, data: Partial<ForumTopic>) => boolean;
   deleteTopic: (topicId: string) => boolean;
   likeTopic: (topicId: string) => void;
@@ -80,25 +129,25 @@ interface AppContextType {
   updateSafetyLog: (logId: string, data: Partial<CaveSafetyLog>) => boolean;
   deleteSafetyLog: (logId: string) => boolean;
 
-  // Board & Desks (Kulüp Yönetimi & Masalar - Max 20)
+  // Board & Desks (Kulüp Yönetimi & Masalar)
   boardMembers: BoardMember[];
   addBoardMember: (data: Omit<BoardMember, 'id'>) => { success: boolean; message?: string };
   updateBoardMember: (id: string, data: Partial<BoardMember>) => boolean;
   deleteBoardMember: (id: string) => boolean;
 
-  // FAQ (Sıkça Sorulan Sorular)
+  // FAQ
   faqs: FAQItem[];
   addFAQ: (data: Omit<FAQItem, 'id'>) => boolean;
   updateFAQ: (id: string, data: Partial<FAQItem>) => boolean;
   deleteFAQ: (id: string) => boolean;
 
-  // Member Guides & Critical Information (Önemli Bilgiler & Üye Rehberi)
+  // Member Guides (Rehber)
   guides: GuideArticle[];
   addGuide: (data: Omit<GuideArticle, 'id' | 'updatedAt'>) => string;
   updateGuide: (id: string, data: Partial<GuideArticle>) => boolean;
   deleteGuide: (id: string) => boolean;
 
-  // Headlamp mode (Kafa Feneri Modu)
+  // Headlamp mode
   headlampMode: boolean;
   toggleHeadlampMode: () => void;
 
@@ -121,6 +170,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [guides, setGuides] = useState<GuideArticle[]>(INITIAL_GUIDES);
   const [headlampMode, setHeadlampMode] = useState<boolean>(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isSupabaseActive, setIsSupabaseActive] = useState(false);
 
   // Strictly check roles:
   const isAdmin = currentUser?.role === 'admin';
@@ -129,69 +179,150 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (currentUser.role === 'admin' || currentUser.role === 'yonetim' || currentUser.role === 'egitmen')
   );
 
-  // Load from localStorage if present
+  // Initialize Data: Check Supabase First, Fallback to localStorage
   useEffect(() => {
-    try {
-      const savedUsers = localStorage.getItem('sdumak_users_v2');
-      let currentUsersList = INITIAL_USERS;
+    let isMounted = true;
 
-      if (savedUsers) {
-        const parsed = JSON.parse(savedUsers);
-        // Ensure Emre Yapıcı admin is always present and updated
-        const hasEmre = parsed.some((u: User) => u.email.toLowerCase() === 'emre4821@outlook.com');
-        if (!hasEmre) {
-          currentUsersList = [...INITIAL_USERS, ...parsed];
-        } else {
-          // ensure Emre is always admin with correct password
-          currentUsersList = parsed.map((u: User) =>
-            u.email.toLowerCase() === 'emre4821@outlook.com'
-              ? { ...u, role: 'admin' as UserRole, password: 'Luciddreams4090', name: 'Emre Yapıcı' }
-              : u
-          );
+    const initialize = async () => {
+      // 1. Check if Supabase is connected
+      if (isSupabaseConfigured() && supabase) {
+        setIsSupabaseActive(true);
+        try {
+          const [dbTopics, dbUsers, dbEvents, dbCaves, dbEquipment, dbSafety, dbBoard, dbFaqs, dbGuides] =
+            await Promise.all([
+              fetchTopicsFromDb(),
+              fetchUsersFromDb(),
+              fetchEventsFromDb(),
+              fetchCavesFromDb(),
+              fetchEquipmentFromDb(),
+              fetchSafetyFromDb(),
+              fetchBoardFromDb(),
+              fetchFaqsFromDb(),
+              fetchGuidesFromDb(),
+            ]);
+
+          if (isMounted) {
+            if (dbUsers && dbUsers.length > 0) {
+              setUsers(dbUsers);
+            } else {
+              // Seed admin into Supabase if empty
+              INITIAL_USERS.forEach((u) => syncUserToDb(u));
+            }
+
+            if (dbTopics && dbTopics.length > 0) setTopics(dbTopics);
+            if (dbEvents && dbEvents.length > 0) setEvents(dbEvents);
+            if (dbCaves && dbCaves.length > 0) setCaves(dbCaves);
+            if (dbEquipment && dbEquipment.length > 0) setEquipment(dbEquipment);
+            if (dbSafety && dbSafety.length > 0) setSafetyLogs(dbSafety);
+            if (dbBoard && dbBoard.length > 0) setBoardMembers(dbBoard);
+            if (dbFaqs && dbFaqs.length > 0) setFaqs(dbFaqs);
+            if (dbGuides && dbGuides.length > 0) setGuides(dbGuides);
+
+            // Restore current user session
+            const savedUserId = localStorage.getItem('sdumak_current_user_v2');
+            if (savedUserId) {
+              const currentList = dbUsers && dbUsers.length > 0 ? dbUsers : INITIAL_USERS;
+              const found = currentList.find((u) => u.id === savedUserId);
+              if (found) setCurrentUser(found);
+            }
+          }
+
+          // 2. Realtime Subscriptions for live updates across all devices
+          const liveChannel = supabase
+            .channel('sdumak-shared-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'topics' }, async () => {
+              const fresh = await fetchTopicsFromDb();
+              if (fresh && isMounted) setTopics(fresh);
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, async () => {
+              const fresh = await fetchEventsFromDb();
+              if (fresh && isMounted) setEvents(fresh);
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'safety_logs' }, async () => {
+              const fresh = await fetchSafetyFromDb();
+              if (fresh && isMounted) setSafetyLogs(fresh);
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'board_members' }, async () => {
+              const fresh = await fetchBoardFromDb();
+              if (fresh && isMounted) setBoardMembers(fresh);
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'guides' }, async () => {
+              const fresh = await fetchGuidesFromDb();
+              if (fresh && isMounted) setGuides(fresh);
+            })
+            .subscribe();
+
+          return () => {
+            if (supabase) supabase.removeChannel(liveChannel);
+          };
+        } catch {
+          // If Supabase network fails, fallback to local
         }
       }
-      setUsers(currentUsersList);
 
-      const savedUser = localStorage.getItem('sdumak_current_user_v2');
-      if (savedUser) {
-        const found = currentUsersList.find((u) => u.id === savedUser);
-        if (found) setCurrentUser(found);
+      // LocalStorage Fallback (if Supabase not yet configured or offline)
+      try {
+        const savedUsers = localStorage.getItem('sdumak_users_v2');
+        let currentUsersList = INITIAL_USERS;
+
+        if (savedUsers) {
+          const parsed = JSON.parse(savedUsers);
+          const hasEmre = parsed.some((u: User) => u.email.toLowerCase() === 'emre4821@outlook.com');
+          if (!hasEmre) {
+            currentUsersList = [...INITIAL_USERS, ...parsed];
+          } else {
+            currentUsersList = parsed.map((u: User) =>
+              u.email.toLowerCase() === 'emre4821@outlook.com'
+                ? { ...u, role: 'admin' as UserRole, password: 'Luciddreams4090', name: 'Emre Yapıcı' }
+                : u
+            );
+          }
+        }
+        if (isMounted) setUsers(currentUsersList);
+
+        const savedUser = localStorage.getItem('sdumak_current_user_v2');
+        if (savedUser && isMounted) {
+          const found = currentUsersList.find((u) => u.id === savedUser);
+          if (found) setCurrentUser(found);
+        }
+
+        const savedTopics = localStorage.getItem('sdumak_topics_v2');
+        if (savedTopics && isMounted) setTopics(JSON.parse(savedTopics));
+
+        const savedEvents = localStorage.getItem('sdumak_events_v2');
+        if (savedEvents && isMounted) setEvents(JSON.parse(savedEvents));
+
+        const savedCaves = localStorage.getItem('sdumak_caves_v2');
+        if (savedCaves && isMounted) setCaves(JSON.parse(savedCaves));
+
+        const savedEquipment = localStorage.getItem('sdumak_equipment_v2');
+        if (savedEquipment && isMounted) setEquipment(JSON.parse(savedEquipment));
+
+        const savedSafety = localStorage.getItem('sdumak_safety_v2');
+        if (savedSafety && isMounted) setSafetyLogs(JSON.parse(savedSafety));
+
+        const savedBoard = localStorage.getItem('sdumak_board_v2');
+        if (savedBoard && isMounted) setBoardMembers(JSON.parse(savedBoard));
+
+        const savedFaqs = localStorage.getItem('sdumak_faqs_v2');
+        if (savedFaqs && isMounted) setFaqs(JSON.parse(savedFaqs));
+
+        const savedGuides = localStorage.getItem('sdumak_guides_v2');
+        if (savedGuides && isMounted) setGuides(JSON.parse(savedGuides));
+      } catch {
+      } finally {
+        if (isMounted) setIsInitialized(true);
       }
+    };
 
-      const savedTopics = localStorage.getItem('sdumak_topics_v2');
-      if (savedTopics) setTopics(JSON.parse(savedTopics));
+    initialize();
 
-      const savedEvents = localStorage.getItem('sdumak_events_v2');
-      if (savedEvents) setEvents(JSON.parse(savedEvents));
-
-      const savedCaves = localStorage.getItem('sdumak_caves_v2');
-      if (savedCaves) setCaves(JSON.parse(savedCaves));
-
-      const savedEquipment = localStorage.getItem('sdumak_equipment_v2');
-      if (savedEquipment) setEquipment(JSON.parse(savedEquipment));
-
-      const savedSafety = localStorage.getItem('sdumak_safety_v2');
-      if (savedSafety) setSafetyLogs(JSON.parse(savedSafety));
-
-      const savedBoard = localStorage.getItem('sdumak_board_v2');
-      if (savedBoard) setBoardMembers(JSON.parse(savedBoard));
-
-      const savedFaqs = localStorage.getItem('sdumak_faqs_v2');
-      if (savedFaqs) setFaqs(JSON.parse(savedFaqs));
-
-      const savedGuides = localStorage.getItem('sdumak_guides_v2');
-      if (savedGuides) setGuides(JSON.parse(savedGuides));
-
-      const savedHeadlamp = localStorage.getItem('sdumak_headlamp');
-      if (savedHeadlamp) setHeadlampMode(JSON.parse(savedHeadlamp));
-    } catch {
-      // Safe fallback
-    } finally {
-      setIsInitialized(true);
-    }
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Save to localStorage
+  // Save to LocalStorage as reliable cache
   useEffect(() => {
     if (!isInitialized) return;
     try {
@@ -255,7 +386,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [guides, isInitialized]);
 
-  // Real Password-Protected Login
+  // Login
   const login = (email: string, password: string): { success: boolean; message?: string } => {
     const cleanEmail = email.trim().toLowerCase();
     const found = users.find((u) => u.email.toLowerCase() === cleanEmail);
@@ -275,7 +406,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return { success: true };
   };
 
-  // Real Registration (New users start as 'caylak', only Admin can grant higher roles!)
+  // Register
   const register = (data: {
     name: string;
     email: string;
@@ -304,7 +435,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       studentNo: data.studentNo.trim(),
       phone: data.phone?.trim() || '',
       bloodType: data.bloodType,
-      role: 'caylak', // New users are ALWAYS registered as caylak!
+      role: 'caylak',
       avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(data.name)}`,
       bio: data.bio?.trim() || 'SDÜMAK Topluluğu Yeni Üyesi',
       badges: ['Yeni Üye (2026)', 'Çaylak'],
@@ -314,17 +445,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     setUsers((prev) => [...prev, newUser]);
     setCurrentUser(newUser);
+    syncUserToDb(newUser);
+
     try {
       localStorage.setItem('sdumak_current_user_v2', newUser.id);
     } catch {}
     return { success: true };
   };
 
-  // Admin-Only Role Assignment
   const changeUserRole = (targetUserId: string, newRole: UserRole): boolean => {
     if (!isAdmin) return false;
     setUsers((prev) =>
-      prev.map((u) => (u.id === targetUserId ? { ...u, role: newRole } : u))
+      prev.map((u) => {
+        if (u.id !== targetUserId) return u;
+        const updated = { ...u, role: newRole };
+        syncUserToDb(updated);
+        return updated;
+      })
     );
     if (currentUser?.id === targetUserId) {
       setCurrentUser((prev) => (prev ? { ...prev, role: newRole } : null));
@@ -332,21 +469,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  // Admin-Only User Deletion
   const deleteUser = (targetUserId: string): boolean => {
     if (!isAdmin) return false;
-    // Cannot delete the main admin
     const target = users.find((u) => u.id === targetUserId);
     if (target?.email.toLowerCase() === 'emre4821@outlook.com') {
       return false;
     }
     setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+    deleteUserFromDb(targetUserId);
     return true;
   };
 
   const updateProfile = (data: Partial<User>) => {
     if (!currentUser) return;
-    // Prevent normal user from changing their own role to admin
     const safeData = { ...data };
     if (!isAdmin) {
       delete safeData.role;
@@ -354,6 +489,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const updated = { ...currentUser, ...safeData };
     setCurrentUser(updated);
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    syncUserToDb(updated);
+
     try {
       localStorage.setItem('sdumak_current_user_v2', updated.id);
     } catch {}
@@ -366,7 +503,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   };
 
-  // Forum Actions - Strictly Admin Only can add/delete topics!
+  // Forum Actions
   const addTopic = (data: {
     categoryId: string;
     title: string;
@@ -375,7 +512,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isAnnouncement?: boolean;
     images?: string[];
   }): string => {
-    if (!isAdmin || !currentUser) return ''; // Only admin can create topics & news!
+    if (!isAdmin || !currentUser) return '';
     const newTopicId = `topic-${Date.now()}`;
     const newTopic: ForumTopic = {
       id: newTopicId,
@@ -395,19 +532,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       comments: [],
     };
     setTopics((prev) => [newTopic, ...prev]);
+    syncTopicToDb(newTopic);
     return newTopicId;
   };
 
   const deleteTopic = (topicId: string): boolean => {
-    if (!isAdmin) return false; // Only admin can delete topics!
+    if (!isAdmin) return false;
     setTopics((prev) => prev.filter((t) => t.id !== topicId));
+    deleteTopicFromDb(topicId);
     return true;
   };
 
   const updateTopic = (topicId: string, data: Partial<ForumTopic>): boolean => {
     if (!isAdmin) return false;
     setTopics((prev) =>
-      prev.map((t) => (t.id === topicId ? { ...t, ...data } : t))
+      prev.map((t) => {
+        if (t.id !== topicId) return t;
+        const updated = { ...t, ...data };
+        syncTopicToDb(updated);
+        return updated;
+      })
     );
     return true;
   };
@@ -421,16 +565,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const newLikedBy = hasLiked
           ? t.likedBy.filter((id) => id !== currentUser.id)
           : [...t.likedBy, currentUser.id];
-        return {
+        const updated = {
           ...t,
           likedBy: newLikedBy,
           likesCount: newLikedBy.length,
         };
+        syncTopicToDb(updated);
+        return updated;
       })
     );
   };
 
-  // Comments (Logged in members can comment)
   const addComment = (topicId: string, content: string) => {
     if (!currentUser) return;
     const newComment: Comment = {
@@ -447,11 +592,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       prev.map((t) => {
         if (t.id !== topicId) return t;
         const currentComments = t.comments || [];
-        return {
+        const updated = {
           ...t,
           comments: [...currentComments, newComment],
           commentsCount: currentComments.length + 1,
         };
+        syncTopicToDb(updated);
+        return updated;
       })
     );
   };
@@ -465,17 +612,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const commentToDelete = currentComments.find((c) => c.id === commentId);
         if (!commentToDelete) return t;
 
-        // Admin or the comment author can delete
         if (!isAdmin && commentToDelete.author.id !== currentUser.id) {
           return t;
         }
 
         const filtered = currentComments.filter((c) => c.id !== commentId);
-        return {
+        const updated = {
           ...t,
           comments: filtered,
           commentsCount: filtered.length,
         };
+        syncTopicToDb(updated);
+        return updated;
       })
     );
     return true;
@@ -487,7 +635,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       prev.map((t) => {
         if (t.id !== topicId) return t;
         const currentComments = t.comments || [];
-        return {
+        const updated = {
           ...t,
           comments: currentComments.map((c) => {
             if (c.id !== commentId) return c;
@@ -502,21 +650,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             };
           }),
         };
+        syncTopicToDb(updated);
+        return updated;
       })
     );
   };
 
-  // Events Actions - Strictly Admin Only can add/delete events!
+  // Events Actions
   const registerForEvent = (eventId: string) => {
     if (!currentUser) return;
     setEvents((prev) =>
       prev.map((ev) => {
         if (ev.id !== eventId) return ev;
         if (ev.registeredUserIds.includes(currentUser.id)) return ev;
-        return {
+        const updated = {
           ...ev,
           registeredUserIds: [...ev.registeredUserIds, currentUser.id],
         };
+        syncEventToDb(updated);
+        return updated;
       })
     );
   };
@@ -526,39 +678,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setEvents((prev) =>
       prev.map((ev) => {
         if (ev.id !== eventId) return ev;
-        return {
+        const updated = {
           ...ev,
           registeredUserIds: ev.registeredUserIds.filter((id) => id !== currentUser.id),
         };
+        syncEventToDb(updated);
+        return updated;
       })
     );
   };
 
   const addEvent = (eventData: Omit<EventItem, 'id' | 'registeredUserIds'>) => {
-    if (!isAdmin) return; // Only Admin can add events!
+    if (!isAdmin) return;
     const newEvent: EventItem = {
       ...eventData,
       id: `evt-${Date.now()}`,
       registeredUserIds: [],
     };
     setEvents((prev) => [newEvent, ...prev]);
+    syncEventToDb(newEvent);
   };
 
   const deleteEvent = (eventId: string): boolean => {
-    if (!isAdmin) return false; // Only Admin can delete events!
+    if (!isAdmin) return false;
     setEvents((prev) => prev.filter((ev) => ev.id !== eventId));
+    deleteEventFromDb(eventId);
     return true;
   };
 
   const updateEvent = (eventId: string, data: Partial<EventItem>): boolean => {
     if (!isAdmin) return false;
     setEvents((prev) =>
-      prev.map((ev) => (ev.id === eventId ? { ...ev, ...data } : ev))
+      prev.map((ev) => {
+        if (ev.id !== eventId) return ev;
+        const updated = { ...ev, ...data };
+        syncEventToDb(updated);
+        return updated;
+      })
     );
     return true;
   };
 
-  // Caves CRUD - Strictly Admin Only
+  // Caves CRUD
   const addCave = (caveData: Omit<Cave, 'id'>) => {
     if (!isAdmin) return;
     const newCave: Cave = {
@@ -566,12 +727,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: `cave-${Date.now()}`,
     };
     setCaves((prev) => [newCave, ...prev]);
+    syncCaveToDb(newCave);
   };
 
   const updateCave = (caveId: string, data: Partial<Cave>): boolean => {
     if (!isAdmin) return false;
     setCaves((prev) =>
-      prev.map((c) => (c.id === caveId ? { ...c, ...data } : c))
+      prev.map((c) => {
+        if (c.id !== caveId) return c;
+        const updated = { ...c, ...data };
+        syncCaveToDb(updated);
+        return updated;
+      })
     );
     return true;
   };
@@ -579,10 +746,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteCave = (caveId: string): boolean => {
     if (!isAdmin) return false;
     setCaves((prev) => prev.filter((c) => c.id !== caveId));
+    deleteCaveFromDb(caveId);
     return true;
   };
 
-  // Equipment Actions - Admin / Leaders
+  // Equipment Actions
   const addEquipment = (data: Omit<Equipment, 'id'>) => {
     if (!isAdmin) return;
     const newEq: Equipment = {
@@ -590,12 +758,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: `eq-${Date.now()}`,
     };
     setEquipment((prev) => [newEq, ...prev]);
+    syncEquipmentToDb(newEq);
   };
 
   const updateEquipment = (equipmentId: string, data: Partial<Equipment>): boolean => {
     if (!canViewPrivateSections) return false;
     setEquipment((prev) =>
-      prev.map((eq) => (eq.id === equipmentId ? { ...eq, ...data } : eq))
+      prev.map((eq) => {
+        if (eq.id !== equipmentId) return eq;
+        const updated = { ...eq, ...data };
+        syncEquipmentToDb(updated);
+        return updated;
+      })
     );
     return true;
   };
@@ -603,20 +777,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteEquipment = (equipmentId: string): boolean => {
     if (!isAdmin) return false;
     setEquipment((prev) => prev.filter((eq) => eq.id !== equipmentId));
+    deleteEquipmentFromDb(equipmentId);
     return true;
   };
 
   const assignEquipment = (equipmentId: string, userName: string) => {
-    if (!canViewPrivateSections) return; // Only admin, yonetim, or egitmen can assign gear!
+    if (!canViewPrivateSections) return;
     setEquipment((prev) =>
       prev.map((eq) => {
         if (eq.id !== equipmentId) return eq;
-        return {
+        const updated = {
           ...eq,
-          status: 'Zimmette',
+          status: 'Zimmette' as const,
           assignedTo: userName,
           assignedDate: new Date().toISOString().split('T')[0],
         };
+        syncEquipmentToDb(updated);
+        return updated;
       })
     );
   };
@@ -625,13 +802,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setEquipment((prev) =>
       prev.map((eq) => {
         if (eq.id !== equipmentId) return eq;
-        return {
+        const updated = {
           ...eq,
-          status: 'Kulüp Deposunda',
+          status: 'Kulüp Deposunda' as const,
           assignedTo: undefined,
           assignedDate: undefined,
           lastInspectionDate: new Date().toISOString().split('T')[0],
         };
+        syncEquipmentToDb(updated);
+        return updated;
       })
     );
   };
@@ -644,19 +823,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: `safe-${Date.now()}`,
     };
     setSafetyLogs((prev) => [newLog, ...prev]);
+    syncSafetyToDb(newLog);
   };
 
   const updateSafetyStatus = (logId: string, status: CaveSafetyLog['status']) => {
     if (!canViewPrivateSections) return;
     setSafetyLogs((prev) =>
-      prev.map((s) => (s.id === logId ? { ...s, status } : s))
+      prev.map((s) => {
+        if (s.id !== logId) return s;
+        const updated = { ...s, status };
+        syncSafetyToDb(updated);
+        return updated;
+      })
     );
   };
 
   const updateSafetyLog = (logId: string, data: Partial<CaveSafetyLog>): boolean => {
     if (!isAdmin) return false;
     setSafetyLogs((prev) =>
-      prev.map((s) => (s.id === logId ? { ...s, ...data } : s))
+      prev.map((s) => {
+        if (s.id !== logId) return s;
+        const updated = { ...s, ...data };
+        syncSafetyToDb(updated);
+        return updated;
+      })
     );
     return true;
   };
@@ -664,6 +854,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteSafetyLog = (logId: string): boolean => {
     if (!isAdmin) return false;
     setSafetyLogs((prev) => prev.filter((s) => s.id !== logId));
+    deleteSafetyFromDb(logId);
     return true;
   };
 
@@ -678,10 +869,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (u.id !== userId) return u;
         const currentBadges = u.badges || [];
         if (currentBadges.includes(cleanBadge)) return u;
-        return {
+        const updated = {
           ...u,
           badges: [...currentBadges, cleanBadge],
         };
+        syncUserToDb(updated);
+        return updated;
       })
     );
 
@@ -701,10 +894,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id !== userId) return u;
-        return {
+        const updated = {
           ...u,
           badges: (u.badges || []).filter((b) => b !== badgeName),
         };
+        syncUserToDb(updated);
+        return updated;
       })
     );
 
@@ -723,7 +918,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateUserByAdmin = (userId: string, data: Partial<User>): boolean => {
     if (!isAdmin) return false;
     setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, ...data } : u))
+      prev.map((u) => {
+        if (u.id !== userId) return u;
+        const updated = { ...u, ...data };
+        syncUserToDb(updated);
+        return updated;
+      })
     );
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => (prev ? { ...prev, ...data } : null));
@@ -731,7 +931,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  // Board & Desks management (Admin Only, Max 20)
+  // Board & Desks management
   const addBoardMember = (data: Omit<BoardMember, 'id'>): { success: boolean; message?: string } => {
     if (!isAdmin) return { success: false, message: 'Bu işlem için Admin yetkisi gereklidir.' };
     if (boardMembers.length >= 20) {
@@ -743,13 +943,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       avatar: data.avatar || '/images/sdumak-logo.png',
     };
     setBoardMembers((prev) => [...prev, newMember]);
+    syncBoardToDb(newMember);
     return { success: true };
   };
 
   const updateBoardMember = (id: string, data: Partial<BoardMember>): boolean => {
     if (!isAdmin) return false;
     setBoardMembers((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, ...data } : m))
+      prev.map((m) => {
+        if (m.id !== id) return m;
+        const updated = { ...m, ...data };
+        syncBoardToDb(updated);
+        return updated;
+      })
     );
     return true;
   };
@@ -757,10 +963,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteBoardMember = (id: string): boolean => {
     if (!isAdmin) return false;
     setBoardMembers((prev) => prev.filter((m) => m.id !== id));
+    deleteBoardFromDb(id);
     return true;
   };
 
-  // FAQ management (Admin Only)
+  // FAQ management
   const addFAQ = (data: Omit<FAQItem, 'id'>): boolean => {
     if (!isAdmin) return false;
     const newFaq: FAQItem = {
@@ -768,13 +975,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: `faq-${Date.now()}`,
     };
     setFaqs((prev) => [...prev, newFaq]);
+    syncFaqToDb(newFaq);
     return true;
   };
 
   const updateFAQ = (id: string, data: Partial<FAQItem>): boolean => {
     if (!isAdmin) return false;
     setFaqs((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, ...data } : f))
+      prev.map((f) => {
+        if (f.id !== id) return f;
+        const updated = { ...f, ...data };
+        syncFaqToDb(updated);
+        return updated;
+      })
     );
     return true;
   };
@@ -782,10 +995,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteFAQ = (id: string): boolean => {
     if (!isAdmin) return false;
     setFaqs((prev) => prev.filter((f) => f.id !== id));
+    deleteFaqFromDb(id);
     return true;
   };
 
-  // Member Guides management (Admin Only)
+  // Member Guides management
   const addGuide = (data: Omit<GuideArticle, 'id' | 'updatedAt'>): string => {
     if (!isAdmin) return '';
     const newId = `guide-${Date.now()}`;
@@ -795,17 +1009,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString().split('T')[0],
     };
     setGuides((prev) => [newGuide, ...prev]);
+    syncGuideToDb(newGuide);
     return newId;
   };
 
   const updateGuide = (id: string, data: Partial<GuideArticle>): boolean => {
     if (!isAdmin) return false;
     setGuides((prev) =>
-      prev.map((g) =>
-        g.id === id
-          ? { ...g, ...data, updatedAt: new Date().toISOString().split('T')[0] }
-          : g
-      )
+      prev.map((g) => {
+        if (g.id !== id) return g;
+        const updated = { ...g, ...data, updatedAt: new Date().toISOString().split('T')[0] };
+        syncGuideToDb(updated);
+        return updated;
+      })
     );
     return true;
   };
@@ -813,6 +1029,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteGuide = (id: string): boolean => {
     if (!isAdmin) return false;
     setGuides((prev) => prev.filter((g) => g.id !== id));
+    deleteGuideFromDb(id);
     return true;
   };
 
@@ -827,6 +1044,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         users,
         isAdmin,
         canViewPrivateSections,
+        isSupabaseActive,
         login,
         register,
         changeUserRole,
