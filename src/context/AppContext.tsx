@@ -183,6 +183,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Initialize Data: Check Supabase First, Fallback to localStorage
   useEffect(() => {
     let isMounted = true;
+    let liveChannel: any = null;
 
     const initialize = async () => {
       // 1. Check if Supabase is connected
@@ -203,91 +204,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ]);
 
           // If Supabase responded (not null), SUPABASE IS OUR SINGLE SOURCE OF TRUTH!
+          // We DO NOT auto-seed mock data on client load. An empty list simply means 0 items.
           if (dbUsers !== null && dbTopics !== null) {
             if (isMounted) {
               // 1. Users
-              if (dbUsers.length > 0) {
-                setUsers(dbUsers);
-              } else {
-                setUsers(INITIAL_USERS);
-                INITIAL_USERS.forEach((u) => syncUserToDb(u));
-              }
+              setUsers(dbUsers.length > 0 ? dbUsers : INITIAL_USERS);
 
-              // 2. Topics - If table is completely fresh (0 rows) and not yet seeded, seed once:
-              const topicsSeeded = localStorage.getItem('sdumak_topics_seeded_v3');
-              if (dbTopics.length === 0 && !topicsSeeded) {
-                setTopics(INITIAL_TOPICS);
-                INITIAL_TOPICS.forEach((t) => syncTopicToDb(t));
-                localStorage.setItem('sdumak_topics_seeded_v3', 'true');
-              } else {
-                // Supabase holds the exact truth (including deleted topics)
-                setTopics(dbTopics);
-              }
+              // 2. Topics / Haberler
+              setTopics(dbTopics || []);
 
-              // 3. Events
-              const eventsSeeded = localStorage.getItem('sdumak_events_seeded_v3');
-              if (dbEvents && dbEvents.length === 0 && !eventsSeeded) {
-                setEvents(INITIAL_EVENTS);
-                INITIAL_EVENTS.forEach((e) => syncEventToDb(e));
-                localStorage.setItem('sdumak_events_seeded_v3', 'true');
-              } else if (dbEvents) {
-                setEvents(dbEvents);
-              }
+              // 3. Events / Faaliyetler
+              setEvents(dbEvents || []);
 
-              // 4. Caves
-              const cavesSeeded = localStorage.getItem('sdumak_caves_seeded_v3');
-              if (dbCaves && dbCaves.length === 0 && !cavesSeeded) {
-                setCaves(INITIAL_CAVES);
-                INITIAL_CAVES.forEach((c) => syncCaveToDb(c));
-                localStorage.setItem('sdumak_caves_seeded_v3', 'true');
-              } else if (dbCaves) {
-                setCaves(dbCaves);
-              }
+              // 4. Caves / Mağara Atlası
+              setCaves(dbCaves || []);
 
-              // 5. Equipment
-              const eqSeeded = localStorage.getItem('sdumak_eq_seeded_v3');
-              if (dbEquipment && dbEquipment.length === 0 && !eqSeeded) {
-                setEquipment(INITIAL_EQUIPMENT);
-                INITIAL_EQUIPMENT.forEach((eq) => syncEquipmentToDb(eq));
-                localStorage.setItem('sdumak_eq_seeded_v3', 'true');
-              } else if (dbEquipment) {
-                setEquipment(dbEquipment);
-              }
+              // 5. Equipment / Demirbaş Envanteri
+              setEquipment(dbEquipment || []);
 
-              // 6. Safety Logs
-              if (dbSafety) {
-                setSafetyLogs(dbSafety);
-              }
+              // 6. Safety Logs / Güvenlik Takibi
+              setSafetyLogs(dbSafety || []);
 
-              // 7. Board Members
-              const boardSeeded = localStorage.getItem('sdumak_board_seeded_v3');
-              if (dbBoard && dbBoard.length === 0 && !boardSeeded) {
-                setBoardMembers(INITIAL_BOARD_MEMBERS);
-                INITIAL_BOARD_MEMBERS.forEach((b) => syncBoardToDb(b));
-                localStorage.setItem('sdumak_board_seeded_v3', 'true');
-              } else if (dbBoard) {
-                setBoardMembers(dbBoard);
-              }
+              // 7. Board Members / Kulüp Yönetimi & Masalar
+              setBoardMembers(dbBoard || []);
 
-              // 8. FAQs
-              const faqsSeeded = localStorage.getItem('sdumak_faqs_seeded_v3');
-              if (dbFaqs && dbFaqs.length === 0 && !faqsSeeded) {
-                setFaqs(INITIAL_FAQS);
-                INITIAL_FAQS.forEach((f) => syncFaqToDb(f));
-                localStorage.setItem('sdumak_faqs_seeded_v3', 'true');
-              } else if (dbFaqs) {
-                setFaqs(dbFaqs);
-              }
+              // 8. FAQs / Sıkça Sorulan Sorular
+              setFaqs(dbFaqs || []);
 
-              // 9. Guides
-              const guidesSeeded = localStorage.getItem('sdumak_guides_seeded_v3');
-              if (dbGuides && dbGuides.length === 0 && !guidesSeeded) {
-                setGuides(INITIAL_GUIDES);
-                INITIAL_GUIDES.forEach((g) => syncGuideToDb(g));
-                localStorage.setItem('sdumak_guides_seeded_v3', 'true');
-              } else if (dbGuides) {
-                setGuides(dbGuides);
-              }
+              // 9. Guides / Üye Rehberi
+              setGuides(dbGuides || []);
 
               // Restore session
               const savedUserId = localStorage.getItem('sdumak_current_user_v2');
@@ -300,8 +245,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               setIsInitialized(true);
             }
 
-            // Realtime subscriptions
-            const liveChannel = supabase
+            // Realtime subscriptions for ALL tables (live sync across all browsers and devices)
+            liveChannel = supabase
               .channel('sdumak-shared-realtime')
               .on('postgres_changes', { event: '*', schema: 'public', table: 'topics' }, async () => {
                 const fresh = await fetchTopicsFromDb();
@@ -335,11 +280,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 const fresh = await fetchFaqsFromDb();
                 if (fresh && isMounted) setFaqs(fresh);
               })
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
+                const fresh = await fetchUsersFromDb();
+                if (fresh && isMounted) setUsers(fresh);
+              })
               .subscribe();
 
-            return () => {
-              if (supabase) supabase.removeChannel(liveChannel);
-            };
+            return;
           }
         } catch (e) {
           console.error('[Supabase Init Exception]:', e);
@@ -438,6 +385,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       isMounted = false;
+      if (liveChannel && supabase) {
+        supabase.removeChannel(liveChannel);
+      }
     };
   }, []);
 
