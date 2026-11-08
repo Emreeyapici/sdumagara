@@ -61,66 +61,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* TOP BRAND BAR */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#202533] pb-4">
-        <div className="flex items-center space-x-3">
-          {/* SDÜMAK Club Logo */}
-          <div className="w-10 h-10 rounded-full p-0.5 bg-[#171a24] ring-1 ring-stone-700/80 shrink-0">
-            <img
-              src="/images/sdumak-logo.png"
-              alt="SDÜMAK"
-              className="w-full h-full object-cover rounded-full"
-            />
-          </div>
-          {/* SDU University Logo */}
-          <div className="w-10 h-10 rounded-full p-0.5 bg-white ring-1 ring-stone-700/80 shrink-0">
-            <img
-              src="/images/sdu-logo.png"
-              alt="SDÜ"
-              className="w-full h-full object-contain rounded-full"
-            />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-bold text-[#f4f1ea] font-heading">
-                SDÜMAK
-              </h1>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#202534] text-[#dba076]">
-                Kuruluş: 2025
-              </span>
-            </div>
-            <p className="text-xs text-[#8e94a3]">
-              Süleyman Demirel Üniversitesi Mağara Araştırma ve Koruma Topluluğu
-            </p>
-          </div>
-        </div>
-
-        {/* Quick Action Navigation */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Link
-            href="/onemli-bilgiler"
-            className="px-3 py-1.5 rounded-xl bg-[#151923] hover:bg-[#1e2332] border border-[#2b3347] text-[#cfcac0] flex items-center gap-1.5 transition font-medium"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-[#dba076]" />
-            <span>Rehber</span>
-          </Link>
-          <Link
-            href="/forum"
-            className="px-3 py-1.5 rounded-xl bg-[#241a14] hover:bg-[#332319] border border-[#4f3524] text-[#dba076] flex items-center gap-1.5 transition font-medium"
-          >
-            <Megaphone className="w-3.5 h-3.5" />
-            <span>Haberler & Forum</span>
-          </Link>
-          <Link
-            href="/etkinlikler"
-            className="px-3.5 py-1.5 rounded-xl bg-[#c87d4a] hover:bg-[#b86d3b] text-white font-semibold flex items-center gap-1.5 transition shadow-sm"
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            <span>Faaliyet Takvimi</span>
-          </Link>
-        </div>
-      </div>
-
       {/* HERO SPOTLIGHT: SON HABERLER, DUYURULAR VE FAALİYETLER VİTRİNİ */}
       {!isInitialized ? (
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-pulse">
