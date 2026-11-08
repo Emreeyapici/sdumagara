@@ -158,16 +158,17 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  // Start with empty arrays to prevent flashing un-hydrated mock data
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [topics, setTopics] = useState<ForumTopic[]>(INITIAL_TOPICS);
-  const [events, setEvents] = useState<EventItem[]>(INITIAL_EVENTS);
-  const [caves, setCaves] = useState<Cave[]>(INITIAL_CAVES);
-  const [equipment, setEquipment] = useState<Equipment[]>(INITIAL_EQUIPMENT);
-  const [safetyLogs, setSafetyLogs] = useState<CaveSafetyLog[]>(INITIAL_SAFETY_WATCH);
-  const [boardMembers, setBoardMembers] = useState<BoardMember[]>(INITIAL_BOARD_MEMBERS);
-  const [faqs, setFaqs] = useState<FAQItem[]>(INITIAL_FAQS);
-  const [guides, setGuides] = useState<GuideArticle[]>(INITIAL_GUIDES);
+  const [topics, setTopics] = useState<ForumTopic[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [caves, setCaves] = useState<Cave[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [safetyLogs, setSafetyLogs] = useState<CaveSafetyLog[]>([]);
+  const [boardMembers, setBoardMembers] = useState<BoardMember[]>([]);
+  const [faqs, setFaqs] = useState<FAQItem[]>([]);
+  const [guides, setGuides] = useState<GuideArticle[]>([]);
   const [headlampMode, setHeadlampMode] = useState<boolean>(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isSupabaseActive, setIsSupabaseActive] = useState(false);
@@ -201,66 +202,152 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               fetchGuidesFromDb(),
             ]);
 
-          if (isMounted) {
-            if (dbUsers && dbUsers.length > 0) {
-              setUsers(dbUsers);
-            } else {
-              // Seed admin into Supabase if empty
-              INITIAL_USERS.forEach((u) => syncUserToDb(u));
+          // If Supabase responded (not null), SUPABASE IS OUR SINGLE SOURCE OF TRUTH!
+          if (dbUsers !== null && dbTopics !== null) {
+            if (isMounted) {
+              // 1. Users
+              if (dbUsers.length > 0) {
+                setUsers(dbUsers);
+              } else {
+                setUsers(INITIAL_USERS);
+                INITIAL_USERS.forEach((u) => syncUserToDb(u));
+              }
+
+              // 2. Topics - If table is completely fresh (0 rows) and not yet seeded, seed once:
+              const topicsSeeded = localStorage.getItem('sdumak_topics_seeded_v3');
+              if (dbTopics.length === 0 && !topicsSeeded) {
+                setTopics(INITIAL_TOPICS);
+                INITIAL_TOPICS.forEach((t) => syncTopicToDb(t));
+                localStorage.setItem('sdumak_topics_seeded_v3', 'true');
+              } else {
+                // Supabase holds the exact truth (including deleted topics)
+                setTopics(dbTopics);
+              }
+
+              // 3. Events
+              const eventsSeeded = localStorage.getItem('sdumak_events_seeded_v3');
+              if (dbEvents && dbEvents.length === 0 && !eventsSeeded) {
+                setEvents(INITIAL_EVENTS);
+                INITIAL_EVENTS.forEach((e) => syncEventToDb(e));
+                localStorage.setItem('sdumak_events_seeded_v3', 'true');
+              } else if (dbEvents) {
+                setEvents(dbEvents);
+              }
+
+              // 4. Caves
+              const cavesSeeded = localStorage.getItem('sdumak_caves_seeded_v3');
+              if (dbCaves && dbCaves.length === 0 && !cavesSeeded) {
+                setCaves(INITIAL_CAVES);
+                INITIAL_CAVES.forEach((c) => syncCaveToDb(c));
+                localStorage.setItem('sdumak_caves_seeded_v3', 'true');
+              } else if (dbCaves) {
+                setCaves(dbCaves);
+              }
+
+              // 5. Equipment
+              const eqSeeded = localStorage.getItem('sdumak_eq_seeded_v3');
+              if (dbEquipment && dbEquipment.length === 0 && !eqSeeded) {
+                setEquipment(INITIAL_EQUIPMENT);
+                INITIAL_EQUIPMENT.forEach((eq) => syncEquipmentToDb(eq));
+                localStorage.setItem('sdumak_eq_seeded_v3', 'true');
+              } else if (dbEquipment) {
+                setEquipment(dbEquipment);
+              }
+
+              // 6. Safety Logs
+              if (dbSafety) {
+                setSafetyLogs(dbSafety);
+              }
+
+              // 7. Board Members
+              const boardSeeded = localStorage.getItem('sdumak_board_seeded_v3');
+              if (dbBoard && dbBoard.length === 0 && !boardSeeded) {
+                setBoardMembers(INITIAL_BOARD_MEMBERS);
+                INITIAL_BOARD_MEMBERS.forEach((b) => syncBoardToDb(b));
+                localStorage.setItem('sdumak_board_seeded_v3', 'true');
+              } else if (dbBoard) {
+                setBoardMembers(dbBoard);
+              }
+
+              // 8. FAQs
+              const faqsSeeded = localStorage.getItem('sdumak_faqs_seeded_v3');
+              if (dbFaqs && dbFaqs.length === 0 && !faqsSeeded) {
+                setFaqs(INITIAL_FAQS);
+                INITIAL_FAQS.forEach((f) => syncFaqToDb(f));
+                localStorage.setItem('sdumak_faqs_seeded_v3', 'true');
+              } else if (dbFaqs) {
+                setFaqs(dbFaqs);
+              }
+
+              // 9. Guides
+              const guidesSeeded = localStorage.getItem('sdumak_guides_seeded_v3');
+              if (dbGuides && dbGuides.length === 0 && !guidesSeeded) {
+                setGuides(INITIAL_GUIDES);
+                INITIAL_GUIDES.forEach((g) => syncGuideToDb(g));
+                localStorage.setItem('sdumak_guides_seeded_v3', 'true');
+              } else if (dbGuides) {
+                setGuides(dbGuides);
+              }
+
+              // Restore session
+              const savedUserId = localStorage.getItem('sdumak_current_user_v2');
+              if (savedUserId) {
+                const list = dbUsers.length > 0 ? dbUsers : INITIAL_USERS;
+                const found = list.find((u) => u.id === savedUserId);
+                if (found) setCurrentUser(found);
+              }
+
+              setIsInitialized(true);
             }
 
-            if (dbTopics && dbTopics.length > 0) setTopics(dbTopics);
-            if (dbEvents && dbEvents.length > 0) setEvents(dbEvents);
-            if (dbCaves && dbCaves.length > 0) setCaves(dbCaves);
-            if (dbEquipment && dbEquipment.length > 0) setEquipment(dbEquipment);
-            if (dbSafety && dbSafety.length > 0) setSafetyLogs(dbSafety);
-            if (dbBoard && dbBoard.length > 0) setBoardMembers(dbBoard);
-            if (dbFaqs && dbFaqs.length > 0) setFaqs(dbFaqs);
-            if (dbGuides && dbGuides.length > 0) setGuides(dbGuides);
+            // Realtime subscriptions
+            const liveChannel = supabase
+              .channel('sdumak-shared-realtime')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'topics' }, async () => {
+                const fresh = await fetchTopicsFromDb();
+                if (fresh && isMounted) setTopics(fresh);
+              })
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, async () => {
+                const fresh = await fetchEventsFromDb();
+                if (fresh && isMounted) setEvents(fresh);
+              })
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'safety_logs' }, async () => {
+                const fresh = await fetchSafetyFromDb();
+                if (fresh && isMounted) setSafetyLogs(fresh);
+              })
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'board_members' }, async () => {
+                const fresh = await fetchBoardFromDb();
+                if (fresh && isMounted) setBoardMembers(fresh);
+              })
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'guides' }, async () => {
+                const fresh = await fetchGuidesFromDb();
+                if (fresh && isMounted) setGuides(fresh);
+              })
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment' }, async () => {
+                const fresh = await fetchEquipmentFromDb();
+                if (fresh && isMounted) setEquipment(fresh);
+              })
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'caves' }, async () => {
+                const fresh = await fetchCavesFromDb();
+                if (fresh && isMounted) setCaves(fresh);
+              })
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'faqs' }, async () => {
+                const fresh = await fetchFaqsFromDb();
+                if (fresh && isMounted) setFaqs(fresh);
+              })
+              .subscribe();
 
-            // Restore current user session
-            const savedUserId = localStorage.getItem('sdumak_current_user_v2');
-            if (savedUserId) {
-              const currentList = dbUsers && dbUsers.length > 0 ? dbUsers : INITIAL_USERS;
-              const found = currentList.find((u) => u.id === savedUserId);
-              if (found) setCurrentUser(found);
-            }
+            return () => {
+              if (supabase) supabase.removeChannel(liveChannel);
+            };
           }
-
-          // 2. Realtime Subscriptions for live updates across all devices
-          const liveChannel = supabase
-            .channel('sdumak-shared-realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'topics' }, async () => {
-              const fresh = await fetchTopicsFromDb();
-              if (fresh && isMounted) setTopics(fresh);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, async () => {
-              const fresh = await fetchEventsFromDb();
-              if (fresh && isMounted) setEvents(fresh);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'safety_logs' }, async () => {
-              const fresh = await fetchSafetyFromDb();
-              if (fresh && isMounted) setSafetyLogs(fresh);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'board_members' }, async () => {
-              const fresh = await fetchBoardFromDb();
-              if (fresh && isMounted) setBoardMembers(fresh);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'guides' }, async () => {
-              const fresh = await fetchGuidesFromDb();
-              if (fresh && isMounted) setGuides(fresh);
-            })
-            .subscribe();
-
-          return () => {
-            if (supabase) supabase.removeChannel(liveChannel);
-          };
-        } catch {
-          // If Supabase network fails, fallback to local
+        } catch (e) {
+          console.error('[Supabase Init Exception]:', e);
         }
       }
 
-      // LocalStorage Fallback (if Supabase not yet configured or offline)
+      // ONLY REACHED IF SUPABASE IS NOT CONFIGURED OR TOTALLY DOWN:
+      setIsSupabaseActive(false);
       try {
         const savedUsers = localStorage.getItem('sdumak_users_v2');
         let currentUsersList = INITIAL_USERS;
@@ -287,28 +374,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         const savedTopics = localStorage.getItem('sdumak_topics_v2');
-        if (savedTopics && isMounted) setTopics(JSON.parse(savedTopics));
+        if (savedTopics && isMounted) {
+          setTopics(JSON.parse(savedTopics));
+        } else if (isMounted) {
+          setTopics(INITIAL_TOPICS);
+        }
 
         const savedEvents = localStorage.getItem('sdumak_events_v2');
-        if (savedEvents && isMounted) setEvents(JSON.parse(savedEvents));
+        if (savedEvents && isMounted) {
+          setEvents(JSON.parse(savedEvents));
+        } else if (isMounted) {
+          setEvents(INITIAL_EVENTS);
+        }
 
         const savedCaves = localStorage.getItem('sdumak_caves_v2');
-        if (savedCaves && isMounted) setCaves(JSON.parse(savedCaves));
+        if (savedCaves && isMounted) {
+          setCaves(JSON.parse(savedCaves));
+        } else if (isMounted) {
+          setCaves(INITIAL_CAVES);
+        }
 
         const savedEquipment = localStorage.getItem('sdumak_equipment_v2');
-        if (savedEquipment && isMounted) setEquipment(JSON.parse(savedEquipment));
+        if (savedEquipment && isMounted) {
+          setEquipment(JSON.parse(savedEquipment));
+        } else if (isMounted) {
+          setEquipment(INITIAL_EQUIPMENT);
+        }
 
         const savedSafety = localStorage.getItem('sdumak_safety_v2');
-        if (savedSafety && isMounted) setSafetyLogs(JSON.parse(savedSafety));
+        if (savedSafety && isMounted) {
+          setSafetyLogs(JSON.parse(savedSafety));
+        } else if (isMounted) {
+          setSafetyLogs(INITIAL_SAFETY_WATCH);
+        }
 
         const savedBoard = localStorage.getItem('sdumak_board_v2');
-        if (savedBoard && isMounted) setBoardMembers(JSON.parse(savedBoard));
+        if (savedBoard && isMounted) {
+          setBoardMembers(JSON.parse(savedBoard));
+        } else if (isMounted) {
+          setBoardMembers(INITIAL_BOARD_MEMBERS);
+        }
 
         const savedFaqs = localStorage.getItem('sdumak_faqs_v2');
-        if (savedFaqs && isMounted) setFaqs(JSON.parse(savedFaqs));
+        if (savedFaqs && isMounted) {
+          setFaqs(JSON.parse(savedFaqs));
+        } else if (isMounted) {
+          setFaqs(INITIAL_FAQS);
+        }
 
         const savedGuides = localStorage.getItem('sdumak_guides_v2');
-        if (savedGuides && isMounted) setGuides(JSON.parse(savedGuides));
+        if (savedGuides && isMounted) {
+          setGuides(JSON.parse(savedGuides));
+        } else if (isMounted) {
+          setGuides(INITIAL_GUIDES);
+        }
       } catch {
       } finally {
         if (isMounted) setIsInitialized(true);
@@ -322,7 +441,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Save to LocalStorage as reliable cache
+  // Save to LocalStorage as secondary cache
   useEffect(() => {
     if (!isInitialized) return;
     try {
@@ -475,7 +594,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (target?.email.toLowerCase() === 'emre4821@outlook.com') {
       return false;
     }
-    setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+    setUsers((prev) => {
+      const updated = prev.filter((u) => u.id !== targetUserId);
+      try {
+        localStorage.setItem('sdumak_users_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     deleteUserFromDb(targetUserId);
     return true;
   };
@@ -488,7 +613,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     const updated = { ...currentUser, ...safeData };
     setCurrentUser(updated);
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    setUsers((prev) => {
+      const upList = prev.map((u) => (u.id === updated.id ? updated : u));
+      try {
+        localStorage.setItem('sdumak_users_v2', JSON.stringify(upList));
+      } catch {}
+      return upList;
+    });
     syncUserToDb(updated);
 
     try {
@@ -531,49 +662,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       images: data.images || [],
       comments: [],
     };
-    setTopics((prev) => [newTopic, ...prev]);
+    setTopics((prev) => {
+      const updated = [newTopic, ...prev];
+      try {
+        localStorage.setItem('sdumak_topics_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     syncTopicToDb(newTopic);
     return newTopicId;
   };
 
   const deleteTopic = (topicId: string): boolean => {
     if (!isAdmin) return false;
-    setTopics((prev) => prev.filter((t) => t.id !== topicId));
+    setTopics((prev) => {
+      const updated = prev.filter((t) => t.id !== topicId);
+      try {
+        localStorage.setItem('sdumak_topics_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     deleteTopicFromDb(topicId);
     return true;
   };
 
   const updateTopic = (topicId: string, data: Partial<ForumTopic>): boolean => {
     if (!isAdmin) return false;
-    setTopics((prev) =>
-      prev.map((t) => {
+    setTopics((prev) => {
+      const updated = prev.map((t) => {
         if (t.id !== topicId) return t;
-        const updated = { ...t, ...data };
-        syncTopicToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...t, ...data };
+        syncTopicToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_topics_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     return true;
   };
 
   const likeTopic = (topicId: string) => {
     if (!currentUser) return;
-    setTopics((prev) =>
-      prev.map((t) => {
+    setTopics((prev) => {
+      const updated = prev.map((t) => {
         if (t.id !== topicId) return t;
         const hasLiked = t.likedBy.includes(currentUser.id);
         const newLikedBy = hasLiked
           ? t.likedBy.filter((id) => id !== currentUser.id)
           : [...t.likedBy, currentUser.id];
-        const updated = {
+        const up = {
           ...t,
           likedBy: newLikedBy,
           likesCount: newLikedBy.length,
         };
-        syncTopicToDb(updated);
-        return updated;
-      })
-    );
+        syncTopicToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_topics_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const addComment = (topicId: string, content: string) => {
@@ -588,25 +739,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       likedBy: [],
     };
 
-    setTopics((prev) =>
-      prev.map((t) => {
+    setTopics((prev) => {
+      const updated = prev.map((t) => {
         if (t.id !== topicId) return t;
         const currentComments = t.comments || [];
-        const updated = {
+        const up = {
           ...t,
           comments: [...currentComments, newComment],
           commentsCount: currentComments.length + 1,
         };
-        syncTopicToDb(updated);
-        return updated;
-      })
-    );
+        syncTopicToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_topics_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const deleteComment = (topicId: string, commentId: string): boolean => {
     if (!currentUser) return false;
-    setTopics((prev) =>
-      prev.map((t) => {
+    setTopics((prev) => {
+      const updated = prev.map((t) => {
         if (t.id !== topicId) return t;
         const currentComments = t.comments || [];
         const commentToDelete = currentComments.find((c) => c.id === commentId);
@@ -617,25 +772,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         const filtered = currentComments.filter((c) => c.id !== commentId);
-        const updated = {
+        const up = {
           ...t,
           comments: filtered,
           commentsCount: filtered.length,
         };
-        syncTopicToDb(updated);
-        return updated;
-      })
-    );
+        syncTopicToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_topics_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     return true;
   };
 
   const likeComment = (topicId: string, commentId: string) => {
     if (!currentUser) return;
-    setTopics((prev) =>
-      prev.map((t) => {
+    setTopics((prev) => {
+      const updated = prev.map((t) => {
         if (t.id !== topicId) return t;
         const currentComments = t.comments || [];
-        const updated = {
+        const up = {
           ...t,
           comments: currentComments.map((c) => {
             if (c.id !== commentId) return c;
@@ -650,42 +809,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             };
           }),
         };
-        syncTopicToDb(updated);
-        return updated;
-      })
-    );
+        syncTopicToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_topics_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   // Events Actions
   const registerForEvent = (eventId: string) => {
     if (!currentUser) return;
-    setEvents((prev) =>
-      prev.map((ev) => {
+    setEvents((prev) => {
+      const updated = prev.map((ev) => {
         if (ev.id !== eventId) return ev;
         if (ev.registeredUserIds.includes(currentUser.id)) return ev;
-        const updated = {
+        const up = {
           ...ev,
           registeredUserIds: [...ev.registeredUserIds, currentUser.id],
         };
-        syncEventToDb(updated);
-        return updated;
-      })
-    );
+        syncEventToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_events_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const cancelEventRegistration = (eventId: string) => {
     if (!currentUser) return;
-    setEvents((prev) =>
-      prev.map((ev) => {
+    setEvents((prev) => {
+      const updated = prev.map((ev) => {
         if (ev.id !== eventId) return ev;
-        const updated = {
+        const up = {
           ...ev,
           registeredUserIds: ev.registeredUserIds.filter((id) => id !== currentUser.id),
         };
-        syncEventToDb(updated);
-        return updated;
-      })
-    );
+        syncEventToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_events_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const addEvent = (eventData: Omit<EventItem, 'id' | 'registeredUserIds'>) => {
@@ -695,27 +866,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: `evt-${Date.now()}`,
       registeredUserIds: [],
     };
-    setEvents((prev) => [newEvent, ...prev]);
+    setEvents((prev) => {
+      const updated = [newEvent, ...prev];
+      try {
+        localStorage.setItem('sdumak_events_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     syncEventToDb(newEvent);
   };
 
   const deleteEvent = (eventId: string): boolean => {
     if (!isAdmin) return false;
-    setEvents((prev) => prev.filter((ev) => ev.id !== eventId));
+    setEvents((prev) => {
+      const updated = prev.filter((ev) => ev.id !== eventId);
+      try {
+        localStorage.setItem('sdumak_events_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     deleteEventFromDb(eventId);
     return true;
   };
 
   const updateEvent = (eventId: string, data: Partial<EventItem>): boolean => {
     if (!isAdmin) return false;
-    setEvents((prev) =>
-      prev.map((ev) => {
+    setEvents((prev) => {
+      const updated = prev.map((ev) => {
         if (ev.id !== eventId) return ev;
-        const updated = { ...ev, ...data };
-        syncEventToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...ev, ...data };
+        syncEventToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_events_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     return true;
   };
 
@@ -726,26 +913,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...caveData,
       id: `cave-${Date.now()}`,
     };
-    setCaves((prev) => [newCave, ...prev]);
+    setCaves((prev) => {
+      const updated = [newCave, ...prev];
+      try {
+        localStorage.setItem('sdumak_caves_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     syncCaveToDb(newCave);
   };
 
   const updateCave = (caveId: string, data: Partial<Cave>): boolean => {
     if (!isAdmin) return false;
-    setCaves((prev) =>
-      prev.map((c) => {
+    setCaves((prev) => {
+      const updated = prev.map((c) => {
         if (c.id !== caveId) return c;
-        const updated = { ...c, ...data };
-        syncCaveToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...c, ...data };
+        syncCaveToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_caves_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     return true;
   };
 
   const deleteCave = (caveId: string): boolean => {
     if (!isAdmin) return false;
-    setCaves((prev) => prev.filter((c) => c.id !== caveId));
+    setCaves((prev) => {
+      const updated = prev.filter((c) => c.id !== caveId);
+      try {
+        localStorage.setItem('sdumak_caves_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     deleteCaveFromDb(caveId);
     return true;
   };
@@ -757,62 +960,86 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...data,
       id: `eq-${Date.now()}`,
     };
-    setEquipment((prev) => [newEq, ...prev]);
+    setEquipment((prev) => {
+      const updated = [newEq, ...prev];
+      try {
+        localStorage.setItem('sdumak_equipment_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     syncEquipmentToDb(newEq);
   };
 
   const updateEquipment = (equipmentId: string, data: Partial<Equipment>): boolean => {
     if (!canViewPrivateSections) return false;
-    setEquipment((prev) =>
-      prev.map((eq) => {
+    setEquipment((prev) => {
+      const updated = prev.map((eq) => {
         if (eq.id !== equipmentId) return eq;
-        const updated = { ...eq, ...data };
-        syncEquipmentToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...eq, ...data };
+        syncEquipmentToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_equipment_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     return true;
   };
 
   const deleteEquipment = (equipmentId: string): boolean => {
     if (!isAdmin) return false;
-    setEquipment((prev) => prev.filter((eq) => eq.id !== equipmentId));
+    setEquipment((prev) => {
+      const updated = prev.filter((eq) => eq.id !== equipmentId);
+      try {
+        localStorage.setItem('sdumak_equipment_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     deleteEquipmentFromDb(equipmentId);
     return true;
   };
 
   const assignEquipment = (equipmentId: string, userName: string) => {
     if (!canViewPrivateSections) return;
-    setEquipment((prev) =>
-      prev.map((eq) => {
+    setEquipment((prev) => {
+      const updated = prev.map((eq) => {
         if (eq.id !== equipmentId) return eq;
-        const updated = {
+        const up = {
           ...eq,
           status: 'Zimmette' as const,
           assignedTo: userName,
           assignedDate: new Date().toISOString().split('T')[0],
         };
-        syncEquipmentToDb(updated);
-        return updated;
-      })
-    );
+        syncEquipmentToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_equipment_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const returnEquipment = (equipmentId: string) => {
-    setEquipment((prev) =>
-      prev.map((eq) => {
+    setEquipment((prev) => {
+      const updated = prev.map((eq) => {
         if (eq.id !== equipmentId) return eq;
-        const updated = {
+        const up = {
           ...eq,
           status: 'Kulüp Deposunda' as const,
           assignedTo: undefined,
           assignedDate: undefined,
           lastInspectionDate: new Date().toISOString().split('T')[0],
         };
-        syncEquipmentToDb(updated);
-        return updated;
-      })
-    );
+        syncEquipmentToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_equipment_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   // Safety actions
@@ -822,38 +1049,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...log,
       id: `safe-${Date.now()}`,
     };
-    setSafetyLogs((prev) => [newLog, ...prev]);
+    setSafetyLogs((prev) => {
+      const updated = [newLog, ...prev];
+      try {
+        localStorage.setItem('sdumak_safety_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     syncSafetyToDb(newLog);
   };
 
   const updateSafetyStatus = (logId: string, status: CaveSafetyLog['status']) => {
     if (!canViewPrivateSections) return;
-    setSafetyLogs((prev) =>
-      prev.map((s) => {
+    setSafetyLogs((prev) => {
+      const updated = prev.map((s) => {
         if (s.id !== logId) return s;
-        const updated = { ...s, status };
-        syncSafetyToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...s, status };
+        syncSafetyToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_safety_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const updateSafetyLog = (logId: string, data: Partial<CaveSafetyLog>): boolean => {
     if (!isAdmin) return false;
-    setSafetyLogs((prev) =>
-      prev.map((s) => {
+    setSafetyLogs((prev) => {
+      const updated = prev.map((s) => {
         if (s.id !== logId) return s;
-        const updated = { ...s, ...data };
-        syncSafetyToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...s, ...data };
+        syncSafetyToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_safety_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     return true;
   };
 
   const deleteSafetyLog = (logId: string): boolean => {
     if (!isAdmin) return false;
-    setSafetyLogs((prev) => prev.filter((s) => s.id !== logId));
+    setSafetyLogs((prev) => {
+      const updated = prev.filter((s) => s.id !== logId);
+      try {
+        localStorage.setItem('sdumak_safety_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     deleteSafetyFromDb(logId);
     return true;
   };
@@ -864,19 +1111,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const cleanBadge = badgeName.trim();
     if (!cleanBadge) return false;
 
-    setUsers((prev) =>
-      prev.map((u) => {
+    setUsers((prev) => {
+      const updatedList = prev.map((u) => {
         if (u.id !== userId) return u;
         const currentBadges = u.badges || [];
         if (currentBadges.includes(cleanBadge)) return u;
-        const updated = {
+        const up = {
           ...u,
           badges: [...currentBadges, cleanBadge],
         };
-        syncUserToDb(updated);
-        return updated;
-      })
-    );
+        syncUserToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_users_v2', JSON.stringify(updatedList));
+      } catch {}
+      return updatedList;
+    });
 
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => {
@@ -891,17 +1142,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const removeUserBadge = (userId: string, badgeName: string): boolean => {
     if (!isAdmin) return false;
-    setUsers((prev) =>
-      prev.map((u) => {
+    setUsers((prev) => {
+      const updatedList = prev.map((u) => {
         if (u.id !== userId) return u;
-        const updated = {
+        const up = {
           ...u,
           badges: (u.badges || []).filter((b) => b !== badgeName),
         };
-        syncUserToDb(updated);
-        return updated;
-      })
-    );
+        syncUserToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_users_v2', JSON.stringify(updatedList));
+      } catch {}
+      return updatedList;
+    });
 
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => {
@@ -917,14 +1172,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateUserByAdmin = (userId: string, data: Partial<User>): boolean => {
     if (!isAdmin) return false;
-    setUsers((prev) =>
-      prev.map((u) => {
+    setUsers((prev) => {
+      const updatedList = prev.map((u) => {
         if (u.id !== userId) return u;
-        const updated = { ...u, ...data };
-        syncUserToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...u, ...data };
+        syncUserToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_users_v2', JSON.stringify(updatedList));
+      } catch {}
+      return updatedList;
+    });
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => (prev ? { ...prev, ...data } : null));
     }
@@ -942,27 +1201,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: `bm-${Date.now()}`,
       avatar: data.avatar || '/images/sdumak-logo.png',
     };
-    setBoardMembers((prev) => [...prev, newMember]);
+    setBoardMembers((prev) => {
+      const updated = [...prev, newMember];
+      try {
+        localStorage.setItem('sdumak_board_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     syncBoardToDb(newMember);
     return { success: true };
   };
 
   const updateBoardMember = (id: string, data: Partial<BoardMember>): boolean => {
     if (!isAdmin) return false;
-    setBoardMembers((prev) =>
-      prev.map((m) => {
+    setBoardMembers((prev) => {
+      const updated = prev.map((m) => {
         if (m.id !== id) return m;
-        const updated = { ...m, ...data };
-        syncBoardToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...m, ...data };
+        syncBoardToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_board_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     return true;
   };
 
   const deleteBoardMember = (id: string): boolean => {
     if (!isAdmin) return false;
-    setBoardMembers((prev) => prev.filter((m) => m.id !== id));
+    setBoardMembers((prev) => {
+      const updated = prev.filter((m) => m.id !== id);
+      try {
+        localStorage.setItem('sdumak_board_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     deleteBoardFromDb(id);
     return true;
   };
@@ -974,27 +1249,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...data,
       id: `faq-${Date.now()}`,
     };
-    setFaqs((prev) => [...prev, newFaq]);
+    setFaqs((prev) => {
+      const updated = [...prev, newFaq];
+      try {
+        localStorage.setItem('sdumak_faqs_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     syncFaqToDb(newFaq);
     return true;
   };
 
   const updateFAQ = (id: string, data: Partial<FAQItem>): boolean => {
     if (!isAdmin) return false;
-    setFaqs((prev) =>
-      prev.map((f) => {
+    setFaqs((prev) => {
+      const updated = prev.map((f) => {
         if (f.id !== id) return f;
-        const updated = { ...f, ...data };
-        syncFaqToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...f, ...data };
+        syncFaqToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_faqs_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     return true;
   };
 
   const deleteFAQ = (id: string): boolean => {
     if (!isAdmin) return false;
-    setFaqs((prev) => prev.filter((f) => f.id !== id));
+    setFaqs((prev) => {
+      const updated = prev.filter((f) => f.id !== id);
+      try {
+        localStorage.setItem('sdumak_faqs_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     deleteFaqFromDb(id);
     return true;
   };
@@ -1008,27 +1299,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: newId,
       updatedAt: new Date().toISOString().split('T')[0],
     };
-    setGuides((prev) => [newGuide, ...prev]);
+    setGuides((prev) => {
+      const updated = [newGuide, ...prev];
+      try {
+        localStorage.setItem('sdumak_guides_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     syncGuideToDb(newGuide);
     return newId;
   };
 
   const updateGuide = (id: string, data: Partial<GuideArticle>): boolean => {
     if (!isAdmin) return false;
-    setGuides((prev) =>
-      prev.map((g) => {
+    setGuides((prev) => {
+      const updated = prev.map((g) => {
         if (g.id !== id) return g;
-        const updated = { ...g, ...data, updatedAt: new Date().toISOString().split('T')[0] };
-        syncGuideToDb(updated);
-        return updated;
-      })
-    );
+        const up = { ...g, ...data, updatedAt: new Date().toISOString().split('T')[0] };
+        syncGuideToDb(up);
+        return up;
+      });
+      try {
+        localStorage.setItem('sdumak_guides_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     return true;
   };
 
   const deleteGuide = (id: string): boolean => {
     if (!isAdmin) return false;
-    setGuides((prev) => prev.filter((g) => g.id !== id));
+    setGuides((prev) => {
+      const updated = prev.filter((g) => g.id !== id);
+      try {
+        localStorage.setItem('sdumak_guides_v2', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     deleteGuideFromDb(id);
     return true;
   };

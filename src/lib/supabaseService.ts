@@ -22,9 +22,12 @@ export const fetchTopicsFromDb = async (): Promise<ForumTopic[] | null> => {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !data) return null;
+    if (error) {
+      console.error('[Supabase fetchTopics error]:', error);
+      return null;
+    }
 
-    return data.map((row: any): ForumTopic => ({
+    return (data || []).map((row: any): ForumTopic => ({
       id: row.id,
       categoryId: row.category_id,
       author: row.author,
@@ -42,7 +45,8 @@ export const fetchTopicsFromDb = async (): Promise<ForumTopic[] | null> => {
       images: row.images || [],
       comments: row.comments || [],
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase fetchTopics exception]:', e);
     return null;
   }
 };
@@ -50,7 +54,7 @@ export const fetchTopicsFromDb = async (): Promise<ForumTopic[] | null> => {
 export const syncTopicToDb = async (topic: ForumTopic) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('topics').upsert({
+    const { error } = await supabase.from('topics').upsert({
       id: topic.id,
       category_id: topic.categoryId,
       author: topic.author,
@@ -68,14 +72,20 @@ export const syncTopicToDb = async (topic: ForumTopic) => {
       images: topic.images,
       comments: topic.comments || [],
     });
-  } catch {}
+    if (error) console.error('[Supabase syncTopic error]:', error);
+  } catch (e) {
+    console.error('[Supabase syncTopic exception]:', e);
+  }
 };
 
 export const deleteTopicFromDb = async (id: string) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('topics').delete().eq('id', id);
-  } catch {}
+    const { error } = await supabase.from('topics').delete().eq('id', id);
+    if (error) console.error('[Supabase deleteTopic error]:', error);
+  } catch (e) {
+    console.error('[Supabase deleteTopic exception]:', e);
+  }
 };
 
 // ==========================================
@@ -85,9 +95,12 @@ export const fetchUsersFromDb = async (): Promise<User[] | null> => {
   if (!supabase || !isSupabaseConfigured()) return null;
   try {
     const { data, error } = await supabase.from('users').select('*');
-    if (error || !data) return null;
+    if (error) {
+      console.error('[Supabase fetchUsers error]:', error);
+      return null;
+    }
 
-    return data.map((row: any): User => ({
+    return (data || []).map((row: any): User => ({
       id: row.id,
       name: row.name,
       email: row.email,
@@ -102,7 +115,8 @@ export const fetchUsersFromDb = async (): Promise<User[] | null> => {
       cavingCount: row.caving_count || 0,
       joinedAt: row.created_at || row.joined_at || new Date().toISOString().split('T')[0],
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase fetchUsers exception]:', e);
     return null;
   }
 };
@@ -110,7 +124,7 @@ export const fetchUsersFromDb = async (): Promise<User[] | null> => {
 export const syncUserToDb = async (user: User) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('users').upsert({
+    const { error } = await supabase.from('users').upsert({
       id: user.id,
       name: user.name,
       email: user.email.toLowerCase(),
@@ -125,14 +139,20 @@ export const syncUserToDb = async (user: User) => {
       caving_count: user.cavingCount,
       joined_at: user.joinedAt,
     });
-  } catch {}
+    if (error) console.error('[Supabase syncUser error]:', error);
+  } catch (e) {
+    console.error('[Supabase syncUser exception]:', e);
+  }
 };
 
 export const deleteUserFromDb = async (id: string) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('users').delete().eq('id', id);
-  } catch {}
+    const { error } = await supabase.from('users').delete().eq('id', id);
+    if (error) console.error('[Supabase deleteUser error]:', error);
+  } catch (e) {
+    console.error('[Supabase deleteUser exception]:', e);
+  }
 };
 
 // ==========================================
@@ -141,10 +161,17 @@ export const deleteUserFromDb = async (id: string) => {
 export const fetchEventsFromDb = async (): Promise<EventItem[] | null> => {
   if (!supabase || !isSupabaseConfigured()) return null;
   try {
-    const { data, error } = await supabase.from('events').select('*').order('start_date', { ascending: true });
-    if (error || !data) return null;
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .order('start_date', { ascending: true });
 
-    return data.map((row: any): EventItem => ({
+    if (error) {
+      console.error('[Supabase fetchEvents error]:', error);
+      return null;
+    }
+
+    return (data || []).map((row: any): EventItem => ({
       id: row.id,
       title: row.title,
       description: row.description || '',
@@ -162,7 +189,8 @@ export const fetchEventsFromDb = async (): Promise<EventItem[] | null> => {
       coverImage: row.cover_image || '',
       images: row.images || [],
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase fetchEvents exception]:', e);
     return null;
   }
 };
@@ -170,7 +198,7 @@ export const fetchEventsFromDb = async (): Promise<EventItem[] | null> => {
 export const syncEventToDb = async (event: EventItem) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('events').upsert({
+    const { error } = await supabase.from('events').upsert({
       id: event.id,
       title: event.title,
       description: event.description,
@@ -188,14 +216,20 @@ export const syncEventToDb = async (event: EventItem) => {
       cover_image: event.coverImage,
       images: event.images || [],
     });
-  } catch {}
+    if (error) console.error('[Supabase syncEvent error]:', error);
+  } catch (e) {
+    console.error('[Supabase syncEvent exception]:', e);
+  }
 };
 
 export const deleteEventFromDb = async (id: string) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('events').delete().eq('id', id);
-  } catch {}
+    const { error } = await supabase.from('events').delete().eq('id', id);
+    if (error) console.error('[Supabase deleteEvent error]:', error);
+  } catch (e) {
+    console.error('[Supabase deleteEvent exception]:', e);
+  }
 };
 
 // ==========================================
@@ -205,9 +239,12 @@ export const fetchCavesFromDb = async (): Promise<Cave[] | null> => {
   if (!supabase || !isSupabaseConfigured()) return null;
   try {
     const { data, error } = await supabase.from('caves').select('*');
-    if (error || !data) return null;
+    if (error) {
+      console.error('[Supabase fetchCaves error]:', error);
+      return null;
+    }
 
-    return data.map((row: any): Cave => ({
+    return (data || []).map((row: any): Cave => ({
       id: row.id,
       name: row.name,
       district: row.district || '',
@@ -222,7 +259,8 @@ export const fetchCavesFromDb = async (): Promise<Cave[] | null> => {
       description: row.description || '',
       images: row.images || [],
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase fetchCaves exception]:', e);
     return null;
   }
 };
@@ -230,7 +268,7 @@ export const fetchCavesFromDb = async (): Promise<Cave[] | null> => {
 export const syncCaveToDb = async (cave: Cave) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('caves').upsert({
+    const { error } = await supabase.from('caves').upsert({
       id: cave.id,
       name: cave.name,
       district: cave.district,
@@ -245,14 +283,20 @@ export const syncCaveToDb = async (cave: Cave) => {
       description: cave.description,
       images: cave.images || [],
     });
-  } catch {}
+    if (error) console.error('[Supabase syncCave error]:', error);
+  } catch (e) {
+    console.error('[Supabase syncCave exception]:', e);
+  }
 };
 
 export const deleteCaveFromDb = async (id: string) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('caves').delete().eq('id', id);
-  } catch {}
+    const { error } = await supabase.from('caves').delete().eq('id', id);
+    if (error) console.error('[Supabase deleteCave error]:', error);
+  } catch (e) {
+    console.error('[Supabase deleteCave exception]:', e);
+  }
 };
 
 // ==========================================
@@ -262,9 +306,12 @@ export const fetchEquipmentFromDb = async (): Promise<Equipment[] | null> => {
   if (!supabase || !isSupabaseConfigured()) return null;
   try {
     const { data, error } = await supabase.from('equipment').select('*');
-    if (error || !data) return null;
+    if (error) {
+      console.error('[Supabase fetchEquipment error]:', error);
+      return null;
+    }
 
-    return data.map((row: any): Equipment => ({
+    return (data || []).map((row: any): Equipment => ({
       id: row.id,
       name: row.name,
       brandModel: row.brand_model || '',
@@ -276,7 +323,8 @@ export const fetchEquipmentFromDb = async (): Promise<Equipment[] | null> => {
       lastInspectionDate: row.last_inspection_date || '',
       condition: row.condition,
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase fetchEquipment exception]:', e);
     return null;
   }
 };
@@ -284,7 +332,7 @@ export const fetchEquipmentFromDb = async (): Promise<Equipment[] | null> => {
 export const syncEquipmentToDb = async (item: Equipment) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('equipment').upsert({
+    const { error } = await supabase.from('equipment').upsert({
       id: item.id,
       name: item.name,
       brand_model: item.brandModel,
@@ -296,14 +344,20 @@ export const syncEquipmentToDb = async (item: Equipment) => {
       last_inspection_date: item.lastInspectionDate,
       condition: item.condition,
     });
-  } catch {}
+    if (error) console.error('[Supabase syncEquipment error]:', error);
+  } catch (e) {
+    console.error('[Supabase syncEquipment exception]:', e);
+  }
 };
 
 export const deleteEquipmentFromDb = async (id: string) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('equipment').delete().eq('id', id);
-  } catch {}
+    const { error } = await supabase.from('equipment').delete().eq('id', id);
+    if (error) console.error('[Supabase deleteEquipment error]:', error);
+  } catch (e) {
+    console.error('[Supabase deleteEquipment exception]:', e);
+  }
 };
 
 // ==========================================
@@ -313,9 +367,12 @@ export const fetchSafetyFromDb = async (): Promise<CaveSafetyLog[] | null> => {
   if (!supabase || !isSupabaseConfigured()) return null;
   try {
     const { data, error } = await supabase.from('safety_logs').select('*');
-    if (error || !data) return null;
+    if (error) {
+      console.error('[Supabase fetchSafety error]:', error);
+      return null;
+    }
 
-    return data.map((row: any): CaveSafetyLog => ({
+    return (data || []).map((row: any): CaveSafetyLog => ({
       id: row.id,
       caveName: row.cave_name,
       teamLeader: row.team_leader,
@@ -326,7 +383,8 @@ export const fetchSafetyFromDb = async (): Promise<CaveSafetyLog[] | null> => {
       teamSize: row.team_size || 1,
       status: row.status,
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase fetchSafety exception]:', e);
     return null;
   }
 };
@@ -334,7 +392,7 @@ export const fetchSafetyFromDb = async (): Promise<CaveSafetyLog[] | null> => {
 export const syncSafetyToDb = async (log: CaveSafetyLog) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('safety_logs').upsert({
+    const { error } = await supabase.from('safety_logs').upsert({
       id: log.id,
       cave_name: log.caveName,
       team_leader: log.teamLeader,
@@ -345,14 +403,20 @@ export const syncSafetyToDb = async (log: CaveSafetyLog) => {
       team_size: log.teamSize,
       status: log.status,
     });
-  } catch {}
+    if (error) console.error('[Supabase syncSafety error]:', error);
+  } catch (e) {
+    console.error('[Supabase syncSafety exception]:', e);
+  }
 };
 
 export const deleteSafetyFromDb = async (id: string) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('safety_logs').delete().eq('id', id);
-  } catch {}
+    const { error } = await supabase.from('safety_logs').delete().eq('id', id);
+    if (error) console.error('[Supabase deleteSafety error]:', error);
+  } catch (e) {
+    console.error('[Supabase deleteSafety exception]:', e);
+  }
 };
 
 // ==========================================
@@ -362,9 +426,12 @@ export const fetchBoardFromDb = async (): Promise<BoardMember[] | null> => {
   if (!supabase || !isSupabaseConfigured()) return null;
   try {
     const { data, error } = await supabase.from('board_members').select('*');
-    if (error || !data) return null;
+    if (error) {
+      console.error('[Supabase fetchBoard error]:', error);
+      return null;
+    }
 
-    return data.map((row: any): BoardMember => ({
+    return (data || []).map((row: any): BoardMember => ({
       id: row.id,
       name: row.name,
       role: row.role,
@@ -372,7 +439,8 @@ export const fetchBoardFromDb = async (): Promise<BoardMember[] | null> => {
       avatar: row.avatar,
       contact: row.contact,
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase fetchBoard exception]:', e);
     return null;
   }
 };
@@ -380,7 +448,7 @@ export const fetchBoardFromDb = async (): Promise<BoardMember[] | null> => {
 export const syncBoardToDb = async (member: BoardMember) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('board_members').upsert({
+    const { error } = await supabase.from('board_members').upsert({
       id: member.id,
       name: member.name,
       role: member.role,
@@ -388,14 +456,20 @@ export const syncBoardToDb = async (member: BoardMember) => {
       avatar: member.avatar,
       contact: member.contact,
     });
-  } catch {}
+    if (error) console.error('[Supabase syncBoard error]:', error);
+  } catch (e) {
+    console.error('[Supabase syncBoard exception]:', e);
+  }
 };
 
 export const deleteBoardFromDb = async (id: string) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('board_members').delete().eq('id', id);
-  } catch {}
+    const { error } = await supabase.from('board_members').delete().eq('id', id);
+    if (error) console.error('[Supabase deleteBoard error]:', error);
+  } catch (e) {
+    console.error('[Supabase deleteBoard exception]:', e);
+  }
 };
 
 // ==========================================
@@ -405,15 +479,19 @@ export const fetchFaqsFromDb = async (): Promise<FAQItem[] | null> => {
   if (!supabase || !isSupabaseConfigured()) return null;
   try {
     const { data, error } = await supabase.from('faqs').select('*');
-    if (error || !data) return null;
+    if (error) {
+      console.error('[Supabase fetchFaqs error]:', error);
+      return null;
+    }
 
-    return data.map((row: any): FAQItem => ({
+    return (data || []).map((row: any): FAQItem => ({
       id: row.id,
       question: row.question,
       answer: row.answer,
       category: row.category,
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase fetchFaqs exception]:', e);
     return null;
   }
 };
@@ -421,20 +499,26 @@ export const fetchFaqsFromDb = async (): Promise<FAQItem[] | null> => {
 export const syncFaqToDb = async (faq: FAQItem) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('faqs').upsert({
+    const { error } = await supabase.from('faqs').upsert({
       id: faq.id,
       question: faq.question,
       answer: faq.answer,
       category: faq.category,
     });
-  } catch {}
+    if (error) console.error('[Supabase syncFaq error]:', error);
+  } catch (e) {
+    console.error('[Supabase syncFaq exception]:', e);
+  }
 };
 
 export const deleteFaqFromDb = async (id: string) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('faqs').delete().eq('id', id);
-  } catch {}
+    const { error } = await supabase.from('faqs').delete().eq('id', id);
+    if (error) console.error('[Supabase deleteFaq error]:', error);
+  } catch (e) {
+    console.error('[Supabase deleteFaq exception]:', e);
+  }
 };
 
 // ==========================================
@@ -444,9 +528,12 @@ export const fetchGuidesFromDb = async (): Promise<GuideArticle[] | null> => {
   if (!supabase || !isSupabaseConfigured()) return null;
   try {
     const { data, error } = await supabase.from('guides').select('*');
-    if (error || !data) return null;
+    if (error) {
+      console.error('[Supabase fetchGuides error]:', error);
+      return null;
+    }
 
-    return data.map((row: any): GuideArticle => ({
+    return (data || []).map((row: any): GuideArticle => ({
       id: row.id,
       title: row.title,
       category: row.category,
@@ -456,7 +543,8 @@ export const fetchGuidesFromDb = async (): Promise<GuideArticle[] | null> => {
       isImportant: !!row.is_important,
       updatedAt: row.updated_at || '',
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase fetchGuides exception]:', e);
     return null;
   }
 };
@@ -464,7 +552,7 @@ export const fetchGuidesFromDb = async (): Promise<GuideArticle[] | null> => {
 export const syncGuideToDb = async (guide: GuideArticle) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('guides').upsert({
+    const { error } = await supabase.from('guides').upsert({
       id: guide.id,
       title: guide.title,
       category: guide.category,
@@ -474,12 +562,18 @@ export const syncGuideToDb = async (guide: GuideArticle) => {
       is_important: guide.isImportant,
       updated_at: new Date().toISOString(),
     });
-  } catch {}
+    if (error) console.error('[Supabase syncGuide error]:', error);
+  } catch (e) {
+    console.error('[Supabase syncGuide exception]:', e);
+  }
 };
 
 export const deleteGuideFromDb = async (id: string) => {
   if (!supabase || !isSupabaseConfigured()) return;
   try {
-    await supabase.from('guides').delete().eq('id', id);
-  } catch {}
+    const { error } = await supabase.from('guides').delete().eq('id', id);
+    if (error) console.error('[Supabase deleteGuide error]:', error);
+  } catch (e) {
+    console.error('[Supabase deleteGuide exception]:', e);
+  }
 };

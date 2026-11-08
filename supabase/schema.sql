@@ -1,6 +1,6 @@
 -- ==========================================================
 -- SDÜMAK (Süleyman Demirel Üniversitesi Mağara Araştırma ve Koruma Topluluğu)
--- Supabase Veritabanı Kurulum Şeması (schema.sql)
+-- Supabase Veritabanı Kurulum Şeması (schema.sql - v2)
 -- ==========================================================
 -- Bu SQL dosyasını Supabase Dashboard > SQL Editor sekmesine
 -- yapıştırıp "Run" (Çalıştır) butonuna basmanız yeterlidir.
@@ -15,16 +15,18 @@ CREATE TABLE IF NOT EXISTS public.users (
   student_no TEXT,
   phone TEXT,
   department TEXT,
-  blood_type TEXT DEFAULT '0 Rh+',
+  blood_type TEXT DEFAULT '0+',
   emergency_contact TEXT,
-  role TEXT DEFAULT 'uye' CHECK (role IN ('admin', 'yonetim', 'egitmen', 'uye', 'caylak')),
+  role TEXT DEFAULT 'caylak' CHECK (role IN ('admin', 'yonetim', 'egitmen', 'uye', 'caylak')),
   caving_count INTEGER DEFAULT 0,
   srt_experience BOOLEAN DEFAULT false,
   join_year INTEGER DEFAULT 2025,
   avatar TEXT,
+  bio TEXT,
   badges JSONB DEFAULT '[]'::jsonb,
   is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  joined_at TEXT
 );
 
 -- 2. FORUM KONULARI & HABERLER TABLOSU (topics)
@@ -150,7 +152,7 @@ CREATE TABLE IF NOT EXISTS public.guides (
 
 -- ==========================================================
 -- ROW LEVEL SECURITY (RLS) POLİTİKALARI
--- (Herkese açık okuma ve web sitesi anahtarı ile yazma izinleri)
+-- (SELECT için USING(true), INSERT/UPDATE/DELETE için WITH CHECK(true))
 -- ==========================================================
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -163,54 +165,105 @@ ALTER TABLE public.board_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.faqs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.guides ENABLE ROW LEVEL SECURITY;
 
--- Anon / Public erişim politikaları
+-- Eski politikaları temizle (varsa)
+DROP POLICY IF EXISTS "Public Read Users" ON public.users;
+DROP POLICY IF EXISTS "Public Manage Users" ON public.users;
+DROP POLICY IF EXISTS "Public Read Topics" ON public.topics;
+DROP POLICY IF EXISTS "Public Manage Topics" ON public.topics;
+DROP POLICY IF EXISTS "Public Read Events" ON public.events;
+DROP POLICY IF EXISTS "Public Manage Events" ON public.events;
+DROP POLICY IF EXISTS "Public Read Caves" ON public.caves;
+DROP POLICY IF EXISTS "Public Manage Caves" ON public.caves;
+DROP POLICY IF EXISTS "Public Read Equipment" ON public.equipment;
+DROP POLICY IF EXISTS "Public Manage Equipment" ON public.equipment;
+DROP POLICY IF EXISTS "Public Read Safety" ON public.safety_logs;
+DROP POLICY IF EXISTS "Public Manage Safety" ON public.safety_logs;
+DROP POLICY IF EXISTS "Public Read Board" ON public.board_members;
+DROP POLICY IF EXISTS "Public Manage Board" ON public.board_members;
+DROP POLICY IF EXISTS "Public Read FAQs" ON public.faqs;
+DROP POLICY IF EXISTS "Public Manage FAQs" ON public.faqs;
+DROP POLICY IF EXISTS "Public Read Guides" ON public.guides;
+DROP POLICY IF EXISTS "Public Manage Guides" ON public.guides;
+
+-- Tam yetkili anon politikaları (Web API anahtarıyla okuma, ekleme, güncelleme ve silme)
 CREATE POLICY "Public Read Users" ON public.users FOR SELECT USING (true);
-CREATE POLICY "Public Insert/Update Users" ON public.users FOR ALL USING (true);
+CREATE POLICY "Public Manage Users" ON public.users FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Public Read Topics" ON public.topics FOR SELECT USING (true);
-CREATE POLICY "Public Manage Topics" ON public.topics FOR ALL USING (true);
+CREATE POLICY "Public Manage Topics" ON public.topics FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Public Read Events" ON public.events FOR SELECT USING (true);
-CREATE POLICY "Public Manage Events" ON public.events FOR ALL USING (true);
+CREATE POLICY "Public Manage Events" ON public.events FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Public Read Caves" ON public.caves FOR SELECT USING (true);
-CREATE POLICY "Public Manage Caves" ON public.caves FOR ALL USING (true);
+CREATE POLICY "Public Manage Caves" ON public.caves FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Public Read Equipment" ON public.equipment FOR SELECT USING (true);
-CREATE POLICY "Public Manage Equipment" ON public.equipment FOR ALL USING (true);
+CREATE POLICY "Public Manage Equipment" ON public.equipment FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Public Read Safety" ON public.safety_logs FOR SELECT USING (true);
-CREATE POLICY "Public Manage Safety" ON public.safety_logs FOR ALL USING (true);
+CREATE POLICY "Public Manage Safety" ON public.safety_logs FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Public Read Board" ON public.board_members FOR SELECT USING (true);
-CREATE POLICY "Public Manage Board" ON public.board_members FOR ALL USING (true);
+CREATE POLICY "Public Manage Board" ON public.board_members FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Public Read FAQs" ON public.faqs FOR SELECT USING (true);
-CREATE POLICY "Public Manage FAQs" ON public.faqs FOR ALL USING (true);
+CREATE POLICY "Public Manage FAQs" ON public.faqs FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Public Read Guides" ON public.guides FOR SELECT USING (true);
-CREATE POLICY "Public Manage Guides" ON public.guides FOR ALL USING (true);
+CREATE POLICY "Public Manage Guides" ON public.guides FOR ALL USING (true) WITH CHECK (true);
 
 -- ==========================================================
 -- REALTIME YAYININI AKTİFLEŞTİR (Canlı Senkronizasyon)
 -- ==========================================================
--- Admin bir haber girdiğinde veya bir üye başvurduğunda
--- herkesin sayfasında yenileme yapmadan anında güncellensin.
--- ==========================================================
 
-ALTER PUBLICATION supabase_realtime ADD TABLE public.topics;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.events;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.safety_logs;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.board_members;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.guides;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.equipment;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.caves;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.topics;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.events;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.safety_logs;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.board_members;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.guides;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.equipment;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.caves;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- ==========================================================
--- İLK RESMİ KURUCU ADMİNİ EKLE (Emre Yapıcı)
+-- KURUCU ADMİN (Emre Yapıcı)
 -- ==========================================================
 INSERT INTO public.users (
-  id, name, email, password, student_no, phone, department, blood_type, role, caving_count, srt_experience, join_year, avatar, is_active
+  id, name, email, password, student_no, phone, blood_type, role, caving_count, avatar, bio, badges, joined_at
 ) VALUES (
   'user-admin-emre',
   'Emre Yapıcı',
@@ -218,12 +271,15 @@ INSERT INTO public.users (
   'Luciddreams4090',
   '2211019045',
   '05550000000',
-  'Mühendislik / Doğa Bilimleri',
-  'A Rh+',
+  'A+',
   'admin',
   24,
-  true,
-  2025,
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-  true
-) ON CONFLICT (id) DO NOTHING;
+  'SDÜMAK Kurucu Başkanı & Mağara Araştırmacısı',
+  '["Kurucu Admin", "SRT-3 İleri Dikey İp", "Haritacı & Ölçümcü"]'::jsonb,
+  '2025-01-01'
+) ON CONFLICT (id) DO UPDATE SET
+  role = 'admin',
+  password = 'Luciddreams4090',
+  name = 'Emre Yapıcı',
+  blood_type = 'A+';
