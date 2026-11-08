@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0d0f14;
+  --foreground: #dcd8d0;
+  --card: #13161d;
+  --card-border: #222631;
+  --ochre: #c87d4a;
+  --ochre-light: #dba076;
+  --ochre-dark: #9e5b2d;
+  --calcite: #ece8e1;
+  --stone-subtle: #8a8f9c;
+  --font-sans: var(--font-sans), system-ui, -apple-system, sans-serif;
+  --font-heading: var(--font-heading), Georgia, serif;
+}
+
+body {
+  background-color: #0d0f14;
+  color: #dcd8d0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Natural Karst Limestone & Basalt Cavern Atmosphere (Matte, organic, zero artificial neon) */
+  background-image: 
+    radial-gradient(ellipse 90% 40% at 50% 0%, rgba(184, 119, 74, 0.05) 0%, transparent 70%),
+    radial-gradient(circle at 85% 30%, rgba(140, 148, 163, 0.03) 0%, transparent 50%),
+    linear-gradient(to bottom, #0d0f14 0%, #10131a 45%, #131722 80%, #0b0d12 100%);
+  background-attachment: fixed;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.01em;
+  font-weight: 700;
+}
+
+/* Authentic Karst Stone Panels */
+.cave-panel {
+  background: linear-gradient(175deg, #131720 0%, #0f121a 100%);
+  border: 1px solid #202636;
+  border-radius: 1rem;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.cave-panel:hover {
+  border-color: #2e374d;
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.65);
+}
+
+/* Natural Mineral Badges */
+.cave-badge {
+  background: rgba(200, 125, 74, 0.1);
+  border: 1px solid rgba(200, 125, 74, 0.25);
+  color: #dba076;
+}
+
+/* Custom Refined Mineral Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d0f14;
+}
+::-webkit-scrollbar-thumb {
+  background: #202636;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #313a52;
+}
